@@ -55,6 +55,7 @@ namespace Raven.Client.Documents.Linq
         private string _jsSelectBody;
         private List<string> _jsProjectionNames;
         private string _fromAlias;
+        private string _possibleFromAlias;
         private StringBuilder _declareBuilder;
         private DeclareToken _declareToken;
         private List<LoadToken> _loadTokens;
@@ -545,21 +546,51 @@ namespace Raven.Client.Documents.Linq
             var convertMatch = ConvertRemover.Match(result.Path);
             if (convertMatch.Success)
                 result.Path = result.Path.Replace(convertMatch.Groups[1].Value, convertMatch.Groups[2].Value);
-            result.Path = result.Path.Substring(result.Path.IndexOf('.') + 1);
-            result.Path = CastingRemover.Replace(result.Path, string.Empty); // removing cast remains
 
-            if (expression.NodeType == ExpressionType.ArrayLength)
-                result.Path += ".Length";
+            var propertyName = GetPropertyName(result.Path, expression.NodeType);
 
-            var propertyName = IndexName == null && _collectionName != null
-                                   ? QueryGenerator.Conventions.FindPropertyNameForDynamicIndex(typeof(T), IndexName, CurrentPath,
-                                                                                                result.Path)
-                                   : QueryGenerator.Conventions.FindPropertyNameForIndex(typeof(T), IndexName, CurrentPath,
-                                                                                         result.Path);
             return new ExpressionInfo(propertyName, result.MemberType, result.IsNestedPath, result.Args)
             {
                 MaybeProperty = result.MaybeProperty
             };
+        }
+
+        private string GetPropertyName(string selectPath, ExpressionType type)
+        {
+            selectPath = LinqPathProvider.RemoveTransparentIdentifiersIfNeeded(selectPath);
+
+            var indexOf = selectPath.IndexOf('.');
+            var parameter = selectPath.Substring(0, indexOf);
+            var withAlias = NeedToRemoveAlias(parameter) == false;
+
+            selectPath = selectPath.Substring(indexOf + 1);
+            selectPath = CastingRemover.Replace(selectPath, string.Empty); // removing cast remains
+
+            if (type == ExpressionType.ArrayLength)
+            {
+                selectPath += ".Length";
+            }
+
+            var propertyName = IndexName == null && _collectionName != null
+                ? QueryGenerator.Conventions.FindPropertyNameForDynamicIndex(typeof(T), IndexName, CurrentPath,
+                    selectPath)
+                : QueryGenerator.Conventions.FindPropertyNameForIndex(typeof(T), IndexName, CurrentPath,
+                    selectPath);
+
+            return withAlias 
+                ? $"{parameter}.{propertyName}"
+                : propertyName;
+        }
+
+        private bool NeedToRemoveAlias(string parameter)
+        {
+            if (parameter == null ||
+                parameter == _fromAlias ||
+                _loadTokens != null &&
+                _loadTokens.Select(lt => lt.Alias).Contains(parameter))
+                return false;
+
+            return true;
         }
 
         private static ParameterExpression GetParameterExpressionIncludingConvertions(Expression expression)
@@ -2003,9 +2034,7 @@ The recommended method is to use full text search (mark the field as Analyzed an
                 case ExpressionType.MemberAccess:
                     var memberExpression = ((MemberExpression)body);
 
-                    var selectPath = LinqPathProvider.RemoveTransparentIdentifiersIfNeeded(GetSelectPath(memberExpression));
-                    var parameter = JavascriptConversionExtensions.GetParameter(memberExpression)?.Name;
-                    selectPath = AddLoadAliasToPathIfNeeded(parameter, selectPath);
+                    var selectPath = GetSelectPath(memberExpression);
 
                     AddToFieldsToFetch(selectPath, selectPath);
                     if (_insideSelect == false)
@@ -2076,7 +2105,7 @@ The recommended method is to use full text search (mark the field as Analyzed an
                         //lambda 2 js
                         if (_fromAlias == null)
                         {
-                            AddFromAlias(lambdaExpression?.Parameters[0].Name);
+                            AddFromAlias(_possibleFromAlias ?? lambdaExpression?.Parameters[0].Name);
                         }
 
                         FieldsToFetch.Clear();
@@ -2138,7 +2167,7 @@ The recommended method is to use full text search (mark the field as Analyzed an
                         //lambda 2 js
                         if (_fromAlias == null)
                         {
-                            AddFromAlias(lambdaExpression?.Parameters[0].Name);
+                            AddFromAlias(_possibleFromAlias ?? lambdaExpression?.Parameters[0].Name);
                         }
 
                         FieldsToFetch.Clear();
@@ -2172,19 +2201,6 @@ The recommended method is to use full text search (mark the field as Analyzed an
                 default:
                     throw new NotSupportedException("Node not supported: " + body.NodeType);
             }
-        }
-
-        private string AddLoadAliasToPathIfNeeded(string parameter, string selectPath)
-        {
-            if (parameter != null &&
-                _loadTokens != null &&
-                selectPath.StartsWith(parameter) == false &&
-                _loadTokens.Select(lt => lt.Alias).Contains(parameter))
-            {
-                return $"{parameter}.{selectPath}";
-            }
-
-            return selectPath;
         }
 
         private static void AddCallArgumentsToPath(string[] mceArgs, ref string path, out string alias)
@@ -2262,9 +2278,9 @@ The recommended method is to use full text search (mark the field as Analyzed an
             var name = GetSelectPath(expression.Members[1]);
             var parameter = expression?.Arguments[0] as ParameterExpression;
 
-            if (_fromAlias == null)
+            if (_fromAlias == null && _possibleFromAlias == null)
             {
-                AddFromAlias(parameter?.Name);
+                _possibleFromAlias = parameter?.Name;
             }
 
             if (_projectionParameters == null)
@@ -2319,41 +2335,14 @@ The recommended method is to use full text search (mark the field as Analyzed an
             }
             else if (loadSupport.Arg is MemberExpression memberExpression)
             {
-                // if memberExpression is <>h__TransparentIdentifierN...TransparentIdentifier1.TransparentIdentifier0.something
-                // then the load-argument is 'something' which is not a real path (a real path should be 'x.something')
-                // but a name of a variable that was previously defined in a 'let' statment.
-
-                var param = memberExpression.Expression is ParameterExpression parameter
-                    ? parameter.Name
-                    : memberExpression.Expression is MemberExpression innerMemberExpression
-                        ? innerMemberExpression.Member.Name
-                        : string.Empty;
-
-                if (param == "<>h__TransparentIdentifier0" || _fromAlias.StartsWith("__ravenDefaultAlias") || _aliasKeywords.Contains(param))
-                {
-                    // (1) the load argument was defined in a previous let statment, i.e :
-                    //     let detailId = "details/1-A" 
-                    //     let deatil = session.Load<Detail>(detailId)
-                    //     ...
-                    // (2) OR the from-alias was a reserved word and we have a let statment,
-                    //     so we changed it to "__ravenDefaultAlias".
-                    //     the load-argument might be a path with respect to the original from-alias name.
-                    // (3) OR the parameter name of the load argument is a reserved word
-                    //     that was defined in a previous let statment, i.e : 
-                    //     let update = session.Load<Order>("orders/1-A")
-                    //     let employee = session.Load<Employee>(update.Employee)
-
-                    //so we use js load() method (inside output function) instead of using a LoadToken
-
-                    AppendLineToOutputFunction(name, ToJs(expression.Arguments[1]));
+                if (HandleMemberArgument(expression, name, memberExpression, out arg))
                     return;
-                }
-                arg = ToJs(loadSupport.Arg, true);
             }
             else
             {
                 //the argument is not a static string value nor a path, 
                 //so we use js load() method (inside output function) instead of using a LoadToken
+
                 AppendLineToOutputFunction(name, ToJs(expression.Arguments[1]));
                 return;
             }
@@ -2365,6 +2354,73 @@ The recommended method is to use full text search (mark the field as Analyzed an
 
             name = RenameAliasIfNeeded(name);
 
+            if (HandleArgDefiendInPreviousLoadIfNeeded(expression, name, arg))
+                return;
+
+            if (js != string.Empty)
+            {
+                // here we have Load(id).member or Load(id).call, i.e : Load(u.Detail).Name, Load(u.Details).Select(x=>x.Name), etc.. 
+                // so we add 'LOAD id as _doc_i' to the query
+                // then inside the output function, we add 'var name = _doc_i.member;'
+                HandleLoadWithMemberlOrLoadWithCall(loadSupport, name, js, arg);
+                return;
+            }
+
+            _loadTokens.Add(
+                loadSupport.IsEnumerable 
+                ? LoadToken.Create(arg, $"{name}[]") 
+                : LoadToken.Create(arg, name));
+        }
+
+        private bool HandleMemberArgument(NewExpression expression, string name, MemberExpression memberExpression, out string arg)
+        {
+            // if memberExpression is <>h__TransparentIdentifierN...TransparentIdentifier1.TransparentIdentifier0.something
+            // then the load-argument is 'something' which is not a real path (a real path should be 'x.something')
+            // but a name of a variable that was previously defined in a 'let' statment.
+
+            arg = null;
+            var argParameter = memberExpression.Expression is ParameterExpression parameter
+                ? parameter.Name
+                : memberExpression.Expression is MemberExpression innerMemberExpression
+                    ? innerMemberExpression.Member.Name
+                    : string.Empty;
+
+            if (argParameter == "<>h__TransparentIdentifier0" ||
+                _aliasKeywords.Contains(argParameter) ||
+                _fromAlias != null && _fromAlias.StartsWith("__ravenDefaultAlias"))           
+            {
+                // (1) the load argument was defined in a previous let statment, i.e :
+                //     let detailId = "details/1-A" 
+                //     let deatil = session.Load<Detail>(detailId)
+                //     ...
+                // (2) OR the from-alias was a reserved word and we have a let statment,
+                //     so we changed it to "__ravenDefaultAlias".
+                //     the load-argument might be a path with respect to the original from-alias name.
+                // (3) OR the parameter name of the load argument is a reserved word
+                //     that was defined in a previous let statment, i.e : 
+                //     let update = session.Load<Order>("orders/1-A")
+                //     let employee = session.Load<Employee>(update.Employee)
+
+                //so we use js load() method (inside output function) instead of using a LoadToken
+
+                AppendLineToOutputFunction(name, ToJs(expression.Arguments[1]));
+                return true;
+            }
+
+            arg = ToJs(memberExpression, true);
+
+            if (_fromAlias == null &&
+                argParameter == _possibleFromAlias)
+            {
+                // alias notation is not needed, remove alias from path
+                arg = arg.Substring(argParameter.Length + 1);
+            }
+
+            return false;
+        }
+
+        private bool HandleArgDefiendInPreviousLoadIfNeeded(NewExpression expression, string name, string arg)
+        {
             var indexOf = arg.IndexOf('.');
             if (indexOf != -1)
             {
@@ -2383,27 +2439,15 @@ The recommended method is to use full text search (mark the field as Analyzed an
 
                     AppendLineToOutputFunction(name, ToJs(expression.Arguments[1]));
                     _loadAliasesMovedToOutputFuction.Add(name);
-                    return;
+                    return true;
                 }
             }
 
-            if (js == string.Empty)
-            {
-                if (loadSupport.IsEnumerable)
-                {
-                    _loadTokens.Add(LoadToken.Create(arg, $"{name}[]"));
-                }
-                else
-                {
-                    _loadTokens.Add(LoadToken.Create(arg, name));
-                }
-                return;
-            }
+            return false;
+        }
 
-            // here we have Load(id).member or Load(id).call, i.e : Load(u.Detail).Name, Load(u.Details).Select(x=>x.Name), etc.. 
-            // so we add 'LOAD id as _doc_i' to the query
-            // then inside the output function, we add 'var name = _doc_i.member;'
-
+        private void HandleLoadWithMemberlOrLoadWithCall(JavascriptConversionExtensions.LoadSupport loadSupport, string name, string js, string arg)
+        {
             string doc;
             if (loadSupport.IsEnumerable)
             {
@@ -2434,6 +2478,11 @@ The recommended method is to use full text search (mark the field as Analyzed an
                 _declareBuilder = new StringBuilder();
             }
 
+            if (_fromAlias == null && _possibleFromAlias != null)
+            {
+                AddFromAlias(_possibleFromAlias);
+            }
+
             name = RenameAliasIfReservedInJs(name);
 
             _declareBuilder.Append("\t").Append("var ").Append(name).Append(" = ").Append(js).Append(";").Append(Environment.NewLine);
@@ -2443,6 +2492,14 @@ The recommended method is to use full text search (mark the field as Analyzed an
         {
             _fromAlias = RenameAliasIfNeeded(alias);
             _documentQuery.AddFromAliasToWhereTokens(_fromAlias);
+
+            if (_loadTokens == null)
+                return;
+
+            foreach (var loadToken in _loadTokens)
+            {
+                loadToken.AddFromAliasToArgument(_fromAlias);
+            }
         }
 
         private void AddAliasToCounterIncludesIfNeeded()

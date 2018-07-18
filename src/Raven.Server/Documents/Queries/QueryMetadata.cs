@@ -589,20 +589,33 @@ namespace Raven.Server.Documents.Queries
                 parameters);
         }
 
-        public static (string Path, string LoadFromAlias) ParseExpressionPath(QueryExpression expr, string path, StringSegment? alias)
+        public static (string Path, string LoadFromAlias) ParseExpressionPath(QueryExpression expr, string path, string fromAlias, 
+            Dictionary<StringSegment, (string PropertyPath, bool Array, bool Parameter, bool Quoted, string LoadFromAlias)> rootAliasPaths = null)
         {
             var indexOf = path.IndexOf('.');
-            if (indexOf == -1 || alias == null)
+            if (indexOf == -1 || rootAliasPaths == null)
                 return (path, null);
 
-            Debug.Assert(alias != null);
+            var loadFromAlias = path.Substring(0, indexOf);
 
-            var compare = string.Compare(
-                alias.Value.Buffer,
-                alias.Value.Offset,
-                path, 0, indexOf, StringComparison.OrdinalIgnoreCase);
+            if (fromAlias != null)
+            {
+                var compare = string.Compare(
+                    fromAlias,
+                    loadFromAlias, 
+                    StringComparison.OrdinalIgnoreCase);
 
-            return compare != 0 ? (path.Substring(indexOf + 1), path.Substring(0, indexOf)) : (path.Substring(indexOf + 1), null);
+                if (compare != 0)
+                {
+                    loadFromAlias = null;
+                }
+            }
+            else if (rootAliasPaths.ContainsKey(loadFromAlias) == false)
+            {
+                loadFromAlias = null;
+            }
+
+            return (path.Substring(indexOf + 1), loadFromAlias);
         }
 
         private void HandleLoadClause(BlittableJsonReaderObject parameters)
@@ -645,7 +658,7 @@ namespace Raven.Server.Documents.Queries
                 }
 
                 string loadFromAlias;
-                (path, loadFromAlias) = ParseExpressionPath(load.Expression, path, Query.From.Alias);
+                (path, loadFromAlias) = ParseExpressionPath(load.Expression, path, Query.From.Alias, RootAliasPaths);
 
                 if (RootAliasPaths.TryAdd(alias, (path, array, parameter, quoted, loadFromAlias)) == false)
                 {
@@ -1149,8 +1162,10 @@ namespace Raven.Server.Documents.Queries
             bool array = false;
             bool parameter = false;
             bool quoted = false;
+            string loadAliasName = null;
             string loadFromAlias = null;
 
+            var compound = expressionField.Compound[0];
             if (expressionField.Compound.Count > 1)
             {
                 if (expressionField.Compound.Last() == "[]")
@@ -1158,27 +1173,30 @@ namespace Raven.Server.Documents.Queries
                     array = true;
                 }
 
-                if (RootAliasPaths.TryGetValue(expressionField.Compound[0], out sourceAlias))
+                if (RootAliasPaths.TryGetValue(compound, out sourceAlias))
                 {
                     name = new QueryFieldName(expressionField.FieldValueWithoutAlias, expressionField.IsQuoted);
                     hasSourceAlias = true;
                     array = sourceAlias.Array;
+                    loadFromAlias = sourceAlias.LoadFromAlias;
+                    loadAliasName = compound;
                 }
                 else if (RootAliasPaths.Count != 0)
                 {
-                    ThrowUnknownAlias(expressionField.Compound[0], parameters);
+                    ThrowUnknownAlias(compound, parameters);
                 }
             }
-            else if (RootAliasPaths.TryGetValue(expressionField.Compound[0], out sourceAlias))
+            else if (RootAliasPaths.TryGetValue(compound, out sourceAlias))
             {
                 hasSourceAlias = true;
                 if (string.IsNullOrEmpty(alias))
-                    alias = expressionField.Compound[0];
+                    alias = compound;
                 array = sourceAlias.Array;
                 name = QueryFieldName.Empty;
                 parameter = sourceAlias.Parameter;
                 quoted = sourceAlias.Quoted;
                 loadFromAlias = sourceAlias.LoadFromAlias;
+                loadAliasName = compound;
             }
             return SelectField.Create(name, alias, sourceAlias.Path, array, hasSourceAlias, parameter, quoted, loadFromAlias);
         }

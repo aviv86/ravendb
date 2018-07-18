@@ -4,7 +4,7 @@ namespace Raven.Client.Documents.Session.Tokens
 {
     public class LoadToken : QueryToken
     {
-        public string Argument { get; }
+        public string Argument { get; private set; }
 
         public string Alias { get; set; }
 
@@ -17,6 +17,11 @@ namespace Raven.Client.Documents.Session.Tokens
         public static LoadToken Create(string argument, string alias)
         {
             return new LoadToken(argument , alias);
+        }
+
+        public void AddFromAliasToArgument(string fromAlias)
+        {
+            Argument = $"{fromAlias}.{Argument}";
         }
 
         public override void WriteTo(StringBuilder writer)

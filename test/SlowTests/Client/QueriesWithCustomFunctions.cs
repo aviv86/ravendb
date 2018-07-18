@@ -2051,8 +2051,8 @@ from Users as u load u.FriendId as _doc_0, u.DetailIds as _docs_1[] select outpu
                                     Friend = friend.Name
                                 };
 
-                    Assert.Equal("from index \'UsersByNameAndFriendId\' as u where u.Name != $p0 " +
-                                 "load u.FriendId as friend select { Name : u.Name, Friend : friend.Name }"
+                    Assert.Equal("from index \'UsersByNameAndFriendId\' where Name != $p0 " +
+                                 "load FriendId as friend select Name, friend.Name as Friend"
                                 , query.ToString());
 
                     var queryResult = query.ToList();
@@ -2105,8 +2105,8 @@ from Users as u load u.FriendId as _doc_0, u.DetailIds as _docs_1[] select outpu
                                     Friend = friend.Name
                                 };
 
-                    Assert.Equal("from index \'UsersByNameAndFriendId\' as u where u.Name != $p0 " +
-                                 "load u.FriendId as friend select { Name : u.Name, Friend : friend.Name }"
+                    Assert.Equal("from index \'UsersByNameAndFriendId\' where Name != $p0 " +
+                                 "load FriendId as friend select Name, friend.Name as Friend"
                                 , query.ToString());
 
                     var queryResult = query.ToList();
@@ -3182,11 +3182,9 @@ from Users as u where u.LastName = $p0 select output(u)", query.ToString());
                                     Friends = friendsDetail.Number
                                 };
 
-                    Assert.Equal("from Users as user " +
-                                 "load user.DetailId as detail, user.FriendId as friend, friend.DetailId as friendsDetail " +
-                                 "select { Name : user.Name, " +
-                                          "Mine : detail.Number, " +
-                                          "Friends : friendsDetail.Number }"
+                    Assert.Equal("from Users " +
+                                 "load DetailId as detail, FriendId as friend, friend.DetailId as friendsDetail " +
+                                 "select Name, detail.Number as Mine, friendsDetail.Number as Friends"
                                 , query.ToString());
 
                     var queryResult = query.ToList();

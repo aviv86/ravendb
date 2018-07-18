@@ -505,9 +505,9 @@ namespace Raven.Server.Documents.Queries.Results
                 if (doc == null)
                     continue;
 
-                if (fieldToFetch.QueryField.Alias != null)
+                if (fieldToFetch.QueryField.LoadAliasName != null)
                 {
-                    _loadedDocumentsByAliasName[fieldToFetch.QueryField.Alias] = doc;
+                    _loadedDocumentsByAliasName[fieldToFetch.QueryField.LoadAliasName] = doc;
                 }
 
                 if (string.IsNullOrEmpty(fieldToFetch.Name)) // we need the whole document here
