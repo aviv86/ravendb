@@ -267,16 +267,56 @@ namespace Sparrow.Extensions
         {
             ValidateDate(dt, isUtc);
 
-            string result = new string('Z', 27 + (isUtc ? 1 : 0));
+            var sizeToAdd = 0;
+            if (isUtc)
+            {
+                sizeToAdd = 1;
+            }
+            else if (dt.Kind == DateTimeKind.Local)
+            {
+                sizeToAdd = 6;
+            }
+            string result = new string('Z', 27 + sizeToAdd);
 
             var ticks = dt.Ticks;
 
             fixed (char* chars = result)
             {
                 ProcessDefaultRavenFormat(ticks, chars);
+
+                if (dt.Kind == DateTimeKind.Local)
+                {
+                    AddUtcOffsetToResult(chars);
+                }
             }
 
             return result;
+        }
+
+        private static unsafe void AddUtcOffsetToResult(char* chars)
+        {
+            var offset = TimeZoneInfo.Local.GetUtcOffset(DateTime.Now);
+
+            char[] v;
+            if (offset.Hours < 0)
+            {
+                chars[27] = '-';
+                v = _fourDigits[-offset.Hours];
+            }
+            else
+            {
+                chars[27] = '+';
+                v = _fourDigits[offset.Hours];
+            }
+
+            chars[28] = v[2];
+            chars[29] = v[3];
+
+            chars[30] = ':';
+
+            v = _fourDigits[offset.Minutes];
+            chars[31] = v[2];
+            chars[32] = v[3];
         }
 
         /// <summary>
