@@ -50,8 +50,8 @@ namespace SlowTests.Tests.Faceted
         {
             Assert.True(facetResult.TryGetValue(key, out var value));
 
-            var oneYearAgo = DateTime.SpecifyKind(now - TimeSpan.FromDays(365), DateTimeKind.Unspecified);
-            var sixMonthsAgo = DateTime.SpecifyKind(now - TimeSpan.FromDays(180), DateTimeKind.Unspecified);
+            var oneYearAgo = now - TimeSpan.FromDays(365);
+            var sixMonthsAgo = now - TimeSpan.FromDays(180);
 
             Assert.Equal($"{key} < {oneYearAgo:o}", value.Values[0].Range);
             Assert.Equal(2, value.Values[0].Count);
@@ -232,8 +232,8 @@ namespace SlowTests.Tests.Faceted
                 new FooIndex().Execute(store);
 
                 var now = DateTime.Now;
-                var oneYearAgo = DateTime.SpecifyKind(now - TimeSpan.FromDays(365), DateTimeKind.Unspecified);
-                var sixMonthsAgo = DateTime.SpecifyKind(now - TimeSpan.FromDays(180), DateTimeKind.Unspecified);
+                var oneYearAgo = now - TimeSpan.FromDays(365);
+                var sixMonthsAgo = now - TimeSpan.FromDays(180);
 
                 StoreSampleData(store, now);
                 WaitForIndexing(store);
