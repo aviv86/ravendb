@@ -28,11 +28,25 @@ namespace Raven.Client.Json.Converters
                 writer.WritePropertyName(kvp.Key);
 
                 object v = kvp.Value;
-                if (v is DateTime)
+                if (v is DateTime dateTime)
                 {
-                    var dateTime = (DateTime)v;
-                    if (dateTime.Kind == DateTimeKind.Unspecified)
-                        dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Local);
+                    switch (serializer.DateTimeZoneHandling)
+                    {
+                        case DateTimeZoneHandling.RoundtripKind:
+                            break;
+                        case DateTimeZoneHandling.Unspecified:
+                            dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Unspecified);
+                            break;
+                        case DateTimeZoneHandling.Local:
+                            dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Local);
+                            break;
+                        case DateTimeZoneHandling.Utc:
+                            dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+
                     writer.WriteValue(dateTime.GetDefaultRavenFormat(dateTime.Kind == DateTimeKind.Utc));
                 }
                 else if (v is DateTimeOffset)

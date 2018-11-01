@@ -16,11 +16,25 @@ namespace Raven.Client.Json.Converters
 
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
-            if (value is DateTime)
+            if (value is DateTime dateTime)
             {
-                var dateTime = (DateTime)value;
-                if (dateTime.Kind == DateTimeKind.Unspecified)
-                    dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Local);
+                switch (serializer.DateTimeZoneHandling)
+                {
+                    case DateTimeZoneHandling.RoundtripKind:
+                        break;
+                    case DateTimeZoneHandling.Unspecified:
+                        dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Unspecified);
+                        break;
+                    case DateTimeZoneHandling.Local:
+                        dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Local);
+                        break;
+                    case DateTimeZoneHandling.Utc:
+                        dateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+
                 writer.WriteValue(dateTime.GetDefaultRavenFormat(dateTime.Kind == DateTimeKind.Utc));
             }
             else if (value is DateTimeOffset)
@@ -34,8 +48,7 @@ namespace Raven.Client.Json.Converters
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
-            var s = reader.Value as string;
-            if (s != null)
+            if (reader.Value is string s)
             {
                 if (objectType == typeof(DateTime) || objectType == typeof(DateTime?))
                 {
