@@ -236,6 +236,10 @@ namespace Sparrow.Json
                 case BlittableJsonToken.Null:
                     WriteNull();
                     break;
+                case BlittableJsonToken.RawBlob:
+                    var blob = (BlittableJsonReaderObject.RawBlob)val;
+                    WriteRawString(blob.Ptr, blob.Length);
+                    break;
                 default:
                     throw new DataMisalignedException($"Unidentified Type {token}");
             }

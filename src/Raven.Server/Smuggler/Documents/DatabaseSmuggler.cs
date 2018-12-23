@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using Raven.Client.Documents.Indexes;
 using Raven.Client.Documents.Operations;
+using Raven.Client.Documents.Operations.Counters;
 using Raven.Client.Documents.Smuggler;
 using Raven.Client.ServerWide;
 using Raven.Client.Util;
@@ -179,6 +181,9 @@ namespace Raven.Server.Smuggler.Documents
                     counts = ProcessCompareExchange(result);
                     break;
                 case DatabaseItemType.Counters:
+                    counts = ProcessLegacyCounters(result);
+                    break;
+                case DatabaseItemType.CountersBatch:
                     counts = ProcessCounters(result);
                     break;
                 default:
@@ -232,6 +237,7 @@ namespace Raven.Server.Smuggler.Documents
                     counts = result.CompareExchange;
                     break;
                 case DatabaseItemType.Counters:
+                case DatabaseItemType.CountersBatch:
                     counts = result.Counters;
                     break;
                 case DatabaseItemType.LegacyDocumentDeletions:
@@ -597,7 +603,7 @@ namespace Raven.Server.Smuggler.Documents
                 if (_options.OperateOnTypes.HasFlag(DatabaseItemType.RevisionDocuments) == false)
                     item.Document.Flags = item.Document.Flags.Strip(DocumentFlags.HasRevisions);
 
-                if (_options.OperateOnTypes.HasFlag(DatabaseItemType.Counters) == false)
+                if (_options.OperateOnTypes.HasFlag(DatabaseItemType.CountersBatch) == false)
                     item.Document.Flags = item.Document.Flags.Strip(DocumentFlags.HasCounters);
 
                 if (_options.OperateOnTypes.HasFlag(DatabaseItemType.Attachments) == false)
@@ -651,7 +657,28 @@ namespace Raven.Server.Smuggler.Documents
         {
             using (var actions = _destination.Counters())
             {
-                foreach (var counterDetail in _source.GetCounterValues())
+                foreach (var counterGroup in _source.GetCounterValues())
+                {
+                    _token.ThrowIfCancellationRequested();
+                    result.Counters.ReadCount+= counterGroup.Values.Count - 1;
+
+                    if (result.Counters.ReadCount % 1000 == 0)
+                        AddInfoToSmugglerResult(result, $"Read {result.Counters.ReadCount:#,#;;0} counters.");
+
+                    actions.WriteCounter(counterGroup);
+
+                    //todo result.Counters.LastEtag = counterDetail.Etag;
+                }
+            }
+
+            return result.Counters;
+        }
+
+        private SmugglerProgressBase.Counts ProcessLegacyCounters(SmugglerResult result)
+        {
+            using (var actions = _destination.Counters())
+            {
+                foreach (var counterDetail in _source.GetLegacyCounterValues())
                 {
                     _token.ThrowIfCancellationRequested();
                     result.Counters.ReadCount++;
@@ -659,9 +686,9 @@ namespace Raven.Server.Smuggler.Documents
                     if (result.Counters.ReadCount % 1000 == 0)
                         AddInfoToSmugglerResult(result, $"Read {result.Counters.ReadCount:#,#;;0} counters.");
 
-                    actions.WriteCounter(counterDetail);
+                    actions.WriteLegacyCounter(counterDetail);
 
-                    result.Counters.LastEtag = counterDetail.Etag;
+                    //result.Counters.LastEtag = counterDetail.Etag;
                 }
             }
 

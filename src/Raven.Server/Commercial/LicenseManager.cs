@@ -1310,14 +1310,14 @@ namespace Raven.Server.Commercial
 
         public void AssertCanAddExternalReplication()
         {
-            if (IsValid(out var licenseLimit) == false)
+/*            if (IsValid(out var licenseLimit) == false)
                 throw licenseLimit;
 
             if (_licenseStatus.HasExternalReplication)
                 return;
 
             var details = $"Your current license ({_licenseStatus.Type}) does not allow adding external replication";
-            throw GenerateLicenseLimit(LimitType.ExternalReplication, details);
+            throw GenerateLicenseLimit(LimitType.ExternalReplication, details);*/
         }
 
         public void AssertCanAddRavenEtl()

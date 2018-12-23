@@ -103,6 +103,7 @@ namespace Sparrow.Json
                 case BlittableJsonToken.Boolean:
                 case BlittableJsonToken.Null:
                 case BlittableJsonToken.EmbeddedBlittable:
+                case BlittableJsonToken.RawBlob:
                     return currentType & TypesMask;
                 default:
                     ThrowInvalidType(currentType);
@@ -146,8 +147,7 @@ namespace Sparrow.Json
 
         public BlittableJsonReaderObject ReadNestedObject(int pos)
         {
-            byte offset;
-            var size = ReadVariableSizeInt(pos, out offset);
+            var size = ReadVariableSizeInt(pos, out byte offset);
             return new BlittableJsonReaderObject(_mem + pos + offset, size, _context)
             {
                 NoCache = NoCache

@@ -88,6 +88,8 @@ namespace Raven.Client.Documents.Operations.Counters
         public long Delta;
 
         internal string ChangeVector;
+        internal long SourceEtag;
+        internal string DbId;
 
         public static CounterOperation Parse(BlittableJsonReaderObject input)
         {
@@ -145,5 +147,11 @@ namespace Raven.Client.Documents.Operations.Counters
                 [nameof(Delta)] = Delta
             };
         }
+    }
+
+    public class CounterGroup
+    {
+        public string ChangeVector;
+        public BlittableJsonReaderObject Values;
     }
 }

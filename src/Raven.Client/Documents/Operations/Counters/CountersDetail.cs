@@ -46,4 +46,23 @@ namespace Raven.Client.Documents.Operations.Counters
             };
         }
     }
+
+    public class CounterGroupDetail
+    {
+        public string DocumentId { get; set; }
+
+        public string ChangeVector { get; set; }
+
+        public BlittableJsonReaderObject Values { get; set; }
+
+        public DynamicJsonValue ToJson()
+        {
+            return new DynamicJsonValue
+            {
+                [nameof(DocumentId)] = DocumentId,
+                [nameof(ChangeVector)] = ChangeVector,
+                [nameof(Values)] = Values
+            };
+        }
+    }
 }
