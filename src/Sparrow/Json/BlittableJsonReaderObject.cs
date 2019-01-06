@@ -814,6 +814,8 @@ namespace Sparrow.Json
             {
                 case BlittableJsonToken.EmbeddedBlittable:
                     return ReadNestedObject(position);
+                case BlittableJsonToken.RawBlob:
+                    return ReadRawBlob(position);
                 case BlittableJsonToken.StartArray:
                     return new BlittableJsonReaderArray(position, _parent ?? this, type)
                     {
@@ -830,6 +832,22 @@ namespace Sparrow.Json
             }
 
             throw new ArgumentOutOfRangeException((type).ToString());
+        }
+
+        public class RawBlob
+        {
+            public byte* Ptr;
+            public int Length;
+        }
+
+        private RawBlob ReadRawBlob(int pos)
+        {
+            var size = ReadVariableSizeInt(pos, out byte offset);
+            return new RawBlob
+            {
+                Ptr = _mem + pos + offset,
+                Length = size
+            };
         }
 
         public void Dispose()
@@ -1125,6 +1143,9 @@ namespace Sparrow.Json
                         stringLength = ReadVariableSizeInt(propValueOffset, out offsetLen);
                         var blittableJsonReaderObject = new BlittableJsonReaderObject(_mem + propValueOffset + offsetLen, stringLength, _context);
                         blittableJsonReaderObject.BlittableValidation();
+                        break;
+                    case BlittableJsonToken.RawBlob:
+                        ReadVariableSizeInt(propValueOffset, out _);
                         break;
                     default:
                         ThrowInvalidTokenType();
