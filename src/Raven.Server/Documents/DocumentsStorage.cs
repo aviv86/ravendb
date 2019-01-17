@@ -889,8 +889,7 @@ namespace Raven.Server.Documents
             string tableName;
 
             if (collection == AttachmentsStorage.AttachmentsTombstones ||
-                collection == RevisionsStorage.RevisionsTombstones ||
-                collection == CountersStorage.CountersTombstones)
+                collection == RevisionsStorage.RevisionsTombstones)
             {
                 tableName = collection;
             }
@@ -1061,11 +1060,6 @@ namespace Raven.Server.Documents
             }
             else if (result.Type == Tombstone.TombstoneType.Revision)
             {
-                result.Collection = TableValueToId(context, (int)TombstoneTable.Collection, ref tvr);
-            }
-            else if (result.Type == Tombstone.TombstoneType.Counter)
-            {
-                result.LastModified = TableValueToDateTime((int)TombstoneTable.LastModified, ref tvr);
                 result.Collection = TableValueToId(context, (int)TombstoneTable.Collection, ref tvr);
             }
 
@@ -1576,8 +1570,7 @@ namespace Raven.Server.Documents
             string tableName;
 
             if (collection == AttachmentsStorage.AttachmentsTombstones ||
-                collection == RevisionsStorage.RevisionsTombstones ||
-                collection == CountersStorage.CountersTombstones)
+                collection == RevisionsStorage.RevisionsTombstones)
             {
                 tableName = collection;
             }
@@ -1605,7 +1598,6 @@ namespace Raven.Server.Documents
         {
             yield return AttachmentsStorage.AttachmentsTombstones;
             yield return RevisionsStorage.RevisionsTombstones;
-            yield return CountersStorage.CountersTombstones;
 
             using (var it = transaction.LowLevelTransaction.RootObjects.Iterate(false))
             {
