@@ -872,11 +872,10 @@ namespace Raven.Server.Documents
                 var data = GetCounterValuesData(context, ref tvr);
                 if (data.TryGet(Values, out BlittableJsonReaderObject counters) == false ||
                     counters.TryGetMember(counterName, out object counterValues) == false ||
-                    counterValues is LazyStringValue || // deleted
-                    !(counterValues is BlittableJsonReaderObject.RawBlob counterValuesAsRawBlob))
+                    counterValues is LazyStringValue)
                     return false;
 
-                blob = counterValuesAsRawBlob;
+                blob = counterValues as BlittableJsonReaderObject.RawBlob;
                 return true;
             }
         }
@@ -1393,6 +1392,13 @@ namespace Raven.Server.Documents
                 
                 current = current.Substring(next + 1);
             }
+        }
+
+        public long GetNumberOfCounterEntries(DocumentsOperationContext context)
+        {
+            var fstIndex = CountersSchema.FixedSizeIndexes[AllCountersEtagSlice];
+            var fst = context.Transaction.InnerTransaction.FixedTreeFor(fstIndex.Name, sizeof(long));
+            return fst.NumberOfEntries;
         }
     }
 }
