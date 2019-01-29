@@ -58,6 +58,10 @@ namespace Raven.Server.Smuggler.Documents
             _source = source;
             _destination = destination;
             _options = options ?? new DatabaseSmugglerOptionsServerSide();
+
+            //todo remove
+            _options.OperateOnTypes |= DatabaseItemType.CountersBatch;
+
             _result = result;
             _token = token;
 
@@ -658,7 +662,7 @@ namespace Raven.Server.Smuggler.Documents
         {
             using (var actions = _destination.Counters())
             {
-                foreach (var counterGroup in _source.GetCounterValues())
+                foreach (var counterGroup in _source.GetCounterValues(actions))
                 {
                     _token.ThrowIfCancellationRequested();
                     result.Counters.ReadCount+= counterGroup.Values.Count - 1;

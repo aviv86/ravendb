@@ -1,7 +1,8 @@
 {
   "profiles": {
     "Voron.Recovery": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "commandLineArgs": "\"recover\" \"d:/\" \"d:/recovery\""
     }
   }
 }

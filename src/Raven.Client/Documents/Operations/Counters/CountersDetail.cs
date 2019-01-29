@@ -27,7 +27,6 @@ namespace Raven.Client.Documents.Operations.Counters
     public class CounterDetail
     {
         public string DocumentId { get; set; }
-        internal LazyStringValue LazyDocumentId { get; set; }
         public string CounterName { get; set; }
         public long TotalValue { get; set; }
         public long Etag { get; set; }
