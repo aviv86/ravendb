@@ -518,7 +518,7 @@ namespace Raven.Server.Smuggler.Documents
         {
             foreach (var reader in ReadArray(actions))
             {
-                if (reader.TryGet(nameof(CounterItem.Batch.CounterKey), out LazyStringValue counterKey) == false ||
+                if (reader.TryGet(nameof(CounterItem.DocId), out LazyStringValue docId) == false ||
                     reader.TryGet(nameof(CounterItem.Batch.Values), out BlittableJsonReaderObject values) == false ||
                     reader.TryGet(nameof(CounterItem.ChangeVector), out LazyStringValue cv) == false)
                 {
@@ -532,7 +532,7 @@ namespace Raven.Server.Smuggler.Documents
 
                 yield return new CounterGroupDetail
                 {
-                    CounterKey = counterKey,
+                    DocumentId = docId,
                     ChangeVector = cv,
                     Values = values
                 };
