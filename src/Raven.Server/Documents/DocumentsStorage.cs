@@ -11,6 +11,7 @@ using Raven.Client.Exceptions.Documents;
 using Raven.Server.Config;
 using Raven.Server.Documents.Expiration;
 using Raven.Server.Documents.Revisions;
+using Raven.Server.Documents.TimeSeries;
 using Raven.Server.ServerWide.Context;
 using Raven.Server.Storage.Layout;
 using Raven.Server.Storage.Schema;
@@ -189,6 +190,7 @@ namespace Raven.Server.Documents
         public ConflictsStorage ConflictsStorage;
         public AttachmentsStorage AttachmentsStorage;
         public CountersStorage CountersStorage;
+        public TimeSeriesStorage TimeSeriesStorage;
         public DocumentPutAction DocumentPut;
         private readonly Action<string> _addToInitLog;
 
@@ -300,6 +302,7 @@ namespace Raven.Server.Documents
                     ConflictsStorage = new ConflictsStorage(DocumentDatabase, tx);
                     AttachmentsStorage = new AttachmentsStorage(DocumentDatabase, tx);
                     CountersStorage = new CountersStorage(DocumentDatabase, tx);
+                    TimeSeriesStorage = new TimeSeriesStorage(DocumentDatabase, tx);
 
                     DocumentPut = new DocumentPutAction(this, DocumentDatabase);
 
