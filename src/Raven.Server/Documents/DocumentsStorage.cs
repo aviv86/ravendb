@@ -315,6 +315,14 @@ namespace Raven.Server.Documents
 
                     tx.Commit();
                 }
+
+                using (ContextPool.AllocateOperationContext(out DocumentsOperationContext context))
+                using (context.OpenReadTransaction())
+                {
+                    var cv = GetDatabaseChangeVector(context);
+                    var lastEtagInChangeVector = ChangeVectorUtils.GetEtagById(cv, DocumentDatabase.DbBase64Id);
+                    _lastEtag = Math.Max(_lastEtag, lastEtagInChangeVector);
+                }
             }
             catch (Exception e)
             {
@@ -387,10 +395,6 @@ namespace Raven.Server.Documents
             return context.LastDatabaseChangeVector;
         }
 
-        public string GetNewChangeVector(DocumentsOperationContext context)
-        {
-            return GetNewChangeVector(context, GenerateNextEtag());
-        }
 
         public static void SetDatabaseChangeVector(DocumentsOperationContext context, string changeVector)
         {
