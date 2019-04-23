@@ -20,18 +20,50 @@ using Xunit.Sdk;
 
 namespace Tryouts
 {
+    public class TestItem
+    {
+        public long A, B;
+    }
+
     public static class Program
     {
         public static async Task Main(string[] args)
         {
-            
-                using (var test = new SlowTests.Authentication.AuthenticationClusterTests())
-                {
-                    await test.CanReplaceClusterCertWithExtensionPoint();
-                }
+            using (var store = new DocumentStore
+            {
+                Urls = new[] { "http://localhost:8080" },
+                Database = "test"
+            })
+            {
+                store.Initialize();
 
-                
-            
+                var sp = Stopwatch.StartNew();
+                var tasks = new Task[10];
+                for (int i = 0; i < 10; i++)
+                {
+                    tasks[i] = WriteMillionDocs(store);
+                }
+                Task.WaitAll(tasks);
+                Console.WriteLine(sp.ElapsedMilliseconds);
+            }
+        }
+
+        private static async Task WriteMillionDocs(DocumentStore store)
+        {
+            using (var bulk = store.BulkInsert())
+            {
+                for (int i = 0; i < 1_000_000; i++)
+                {
+                    var t = bulk.StoreAsync(new TestItem
+                    {
+                        A = i,
+                        B = i
+                    });
+                    if (t.IsCompleted)
+                        continue;
+                    await t;
+                }
+            }
         }
     }
 }

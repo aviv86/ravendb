@@ -945,6 +945,24 @@ namespace Raven.Server.Documents.Handlers
                             Reply.Add(acReply);
 
                             break;
+                        case CommandType.TimeSeries:
+                            cmd.TimeSeries.Id = cmd.Id;
+                            var tsCmd = new TimeSeriesHandler.ExecuteTimeSeriesBatchCommand(Database, cmd.TimeSeries, false);
+
+                            tsCmd.ExecuteDirectly(context);
+
+                            LastChangeVector = tsCmd.LastChangeVector;
+
+                            Reply.Add(new DynamicJsonValue
+                            {
+                                [nameof(BatchRequestParser.CommandData.Id)] = cmd.Id,
+                                [nameof(BatchRequestParser.CommandData.ChangeVector)] = tsCmd.LastChangeVector,
+                                [nameof(BatchRequestParser.CommandData.Type)] = nameof(CommandType.TimeSeries),
+                                //TODO: handle this
+                                //[nameof(Constants.Fields.CommandData.DocumentChangeVector)] = tsCmd.LastDocumentChangeVector
+                            });
+
+                            break;
                         case CommandType.Counters:
 
                             var counterDocId = cmd.Counters.DocumentId;
