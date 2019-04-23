@@ -34,6 +34,7 @@ namespace Raven.Client.Documents.Commands.Batches
         CompareExchangeDELETE,
 
         Counters,
+        TimeSeries,
 
         BatchPATCH,
         // NOTE: When you add anything here, such as additional 
