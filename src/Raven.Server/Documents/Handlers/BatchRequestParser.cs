@@ -478,7 +478,7 @@ namespace Raven.Server.Documents.Handlers
                             if (state.CurrentTokenType == JsonParserToken.EndArray)
                                 break;
 
-                            var append = await ReadJsonObject(ctx, stream, commandData.Id, parser, state, buffer, token);
+                            var append = await ReadJsonObject(ctx, stream, commandData.Id, parser, state, buffer, modifier, token);
                             commandData.TimeSeries.Appends.Add(AppendTimeSeriesOperation.Parse(append));
                         }
                         break;
@@ -497,7 +497,7 @@ namespace Raven.Server.Documents.Handlers
                             if (state.CurrentTokenType == JsonParserToken.EndArray)
                                 break;
 
-                            var removal = await ReadJsonObject(ctx, stream, commandData.Id, parser, state, buffer, token);
+                            var removal = await ReadJsonObject(ctx, stream, commandData.Id, parser, state, buffer, modifier, token);
                             commandData.TimeSeries.Removals.Add(RemoveTimeSeriesOperation.Parse(removal));
                         }
                         break;

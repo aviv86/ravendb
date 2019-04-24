@@ -31,7 +31,7 @@ namespace Tryouts
         public static async Task Main(string[] args)
         {
             using (var test = new TimeSeriesTests())
-                test.CanStoreLargeNumberOfValues();
+                test.CanStoreValuesOutOfOrder();
         }
 
         private static async Task WriteMillionDocs(DocumentStore store)
