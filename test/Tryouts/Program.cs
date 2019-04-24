@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using FastTests.Server.Basic;
+using FastTests.Server.Documents;
 using Newtonsoft.Json.Linq;
 using Raven.Client.Documents;
 using Raven.Server.Documents;
@@ -29,23 +30,8 @@ namespace Tryouts
     {
         public static async Task Main(string[] args)
         {
-            using (var store = new DocumentStore
-            {
-                Urls = new[] { "http://localhost:8080" },
-                Database = "test"
-            })
-            {
-                store.Initialize();
-
-                var sp = Stopwatch.StartNew();
-                var tasks = new Task[10];
-                for (int i = 0; i < 10; i++)
-                {
-                    tasks[i] = WriteMillionDocs(store);
-                }
-                Task.WaitAll(tasks);
-                Console.WriteLine(sp.ElapsedMilliseconds);
-            }
+            using (var test = new TimeSeriesTests())
+                test.CanStoreLargeNumberOfValues();
         }
 
         private static async Task WriteMillionDocs(DocumentStore store)
