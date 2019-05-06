@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -30,8 +31,56 @@ namespace Tryouts
     {
         public static async Task Main(string[] args)
         {
-            using (var test = new TimeSeriesTests())
-                test.CanStoreValuesOutOfOrder();
+            var store = new DocumentStore
+            {
+                Urls = new[] { "http://localhost:8080" },
+                Database = "Test"
+            }.Initialize();
+
+            var list = new List<(DateTime, double)>();
+
+            DateTime start = default;
+
+            var lines = File.ReadLines(@"C:\Users\ayende\source\repos\ConsoleApp20\ConsoleApp20\bin\Debug\netcoreapp2.2\out.csv");
+            foreach (var line in lines)
+            {
+                var parts = line.Split(',');
+                if (parts.Length != 2)
+                    continue;
+                if (DateTime.TryParseExact(parts[0], "o", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date) == false)
+                    continue;
+                if (double.TryParse(parts[1], out var d) == false)
+                    continue;
+
+                list.Add((date, d));
+                if(list.Count >= 250)
+                {
+                    FlushBpm(store, list);
+                    if ((date - start).TotalDays > 30)
+                    {
+                        Console.WriteLine(date);
+                        start = date;
+                    }
+                }
+            }
+
+            FlushBpm(store, list);
+        }
+
+        private static void FlushBpm(IDocumentStore store, List<(DateTime, double)> list)
+        {
+            using (var s = store.OpenSession())
+            {
+                var ts = s.TimeSeriesFor("users/ayende");
+
+                foreach (var item in list)
+                {
+                    ts.Append("BPM", item.Item1, "watches/fitbit", new[] { item.Item2 });
+                }
+
+                s.SaveChanges();
+            }
+            list.Clear();
         }
 
         private static async Task WriteMillionDocs(DocumentStore store)
