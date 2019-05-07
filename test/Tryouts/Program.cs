@@ -31,56 +31,58 @@ namespace Tryouts
     {
         public static async Task Main(string[] args)
         {
-            var store = new DocumentStore
-            {
-                Urls = new[] { "http://localhost:8080" },
-                Database = "Test"
-            }.Initialize();
+            using (var test = new TimeSeriesTests())
+                test.CanCreateSimpleTimeSeries();
 
-            var list = new List<(DateTime, double)>();
+            //var store = new DocumentStore
+            //{
+            //    Urls = new[] { "http://localhost:8080" },
+            //    Database = "Test"
+            //}.Initialize();
 
-            DateTime start = default;
 
-            var lines = File.ReadLines(@"C:\Users\ayende\source\repos\ConsoleApp20\ConsoleApp20\bin\Debug\netcoreapp2.2\out.csv");
-            foreach (var line in lines)
-            {
-                var parts = line.Split(',');
-                if (parts.Length != 2)
-                    continue;
-                if (DateTime.TryParseExact(parts[0], "o", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date) == false)
-                    continue;
-                if (double.TryParse(parts[1], out var d) == false)
-                    continue;
+            //var lines = File.ReadAllLines(@"C:\Users\ayende\source\repos\ConsoleApp20\ConsoleApp20\bin\Debug\netcoreapp2.2\out.csv")
+            //    .Select(line =>
+            //    {
+            //        var parts = line.Split(',');
+            //        if (parts.Length != 2)
+            //            return default;
+            //        if (DateTime.TryParseExact(parts[0], "o", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date) == false)
+            //            return default;
+            //        if (double.TryParse(parts[1], out var d) == false)
+            //            return default;
 
-                list.Add((date, d));
-                if(list.Count >= 250)
-                {
-                    FlushBpm(store, list);
-                    if ((date - start).TotalDays > 30)
-                    {
-                        Console.WriteLine(date);
-                        start = date;
-                    }
-                }
-            }
-
-            FlushBpm(store, list);
+            //        return (date, d);
+            //    })
+            //    .Where(x => x.date > DateTime.MinValue)
+            //    .OrderBy(x => x.date)
+            //    .ToList();
+            //var start = DateTime.MinValue;
+            //for (int i = 0; i < lines.Count; i+=250)
+            //{
+            //    FlushBpm(store, lines, i, Math.Min(250, lines.Count - i));
+            //    if ((lines[i].date - start).TotalDays > 30)
+            //    {
+            //        start = lines[i].date;
+            //        Console.WriteLine(start);
+            //    }
+            //}
         }
 
-        private static void FlushBpm(IDocumentStore store, List<(DateTime, double)> list)
+        private static void FlushBpm(IDocumentStore store, List<(DateTime, double)> list, int offset, int count)
         {
             using (var s = store.OpenSession())
             {
                 var ts = s.TimeSeriesFor("users/ayende");
 
-                foreach (var item in list)
+                for (int i = 0; i < count; i++)
                 {
+                    var item = list[offset + i];
                     ts.Append("BPM", item.Item1, "watches/fitbit", new[] { item.Item2 });
                 }
 
                 s.SaveChanges();
             }
-            list.Clear();
         }
 
         private static async Task WriteMillionDocs(DocumentStore store)
