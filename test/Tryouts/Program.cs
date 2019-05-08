@@ -32,7 +32,7 @@ namespace Tryouts
         public static async Task Main(string[] args)
         {
             using (var test = new TimeSeriesTests())
-                test.CanCreateSimpleTimeSeries();
+                test.CanStoreAndReadMultipleTimestamps();
 
             //var store = new DocumentStore
             //{
