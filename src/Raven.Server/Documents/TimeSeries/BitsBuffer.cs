@@ -1,38 +1,102 @@
 ﻿using System;
 using System.Diagnostics;
+using Sparrow;
+using Sparrow.Compression;
+using Sparrow.Server;
 
 namespace Raven.Server.Documents.TimeSeries
 {
     public unsafe struct BitsBuffer
     {
-        public byte* Buffer;
+        private byte* _buffer;
+        public Span<byte> Buffer
+        {
+            get => new Span<byte>(_buffer, Size - (int)(_buffer - ((byte*)Header)));
+        }
+
         public int Size;
         public BitsBufferHeader* Header;
 
-        public int NumberOfBits => Header->BitsPosition;
+        public int NumberOfBits => Header->UncompressedBitsPosition + Header->UncompressedSize * 8;
 
-        public int NumberOfBytes => NumberOfBits / 8 + (NumberOfBits % 8 == 0 ? 0 : 1) + sizeof(BitsBufferHeader);
+        public int NumberOfBytes => UncompressedBitsInBytes + Header->CompressedSize + sizeof(BitsBufferHeader);
 
-        public bool HasAdditionalBits(int numberOfBits)
+        private byte* CompressedBuffer => ((byte*)Header) + sizeof(BitsBufferHeader);
+
+        private int UncompressedBitsInBytes
         {
-            return HasEnoughBits(Header->BitsPosition, numberOfBits);
+            get
+            {
+                var bits = Header->UncompressedBitsPosition;
+                var rawBytes = bits / 8 + (bits % 8 == 0 ? 0 : 1) ;
+                return rawBytes;
+            }
         }
 
-        public ulong ReadValue(int pos, int bits)
+        public bool IsCompressed => Header->CompressedSize > 0;
+
+        public bool EnsureAdditionalBits(ByteStringContext allocator, int numberOfBits)
         {
-            return ReadValue(ref pos, bits);
+            if (HasEnoughBits(Header->UncompressedBitsPosition, numberOfBits))
+                return true;
+
+            return TryCompressBuffer(allocator, numberOfBits / 8);
+        }
+
+        public bool TryCompressBuffer(ByteStringContext allocator, int requiredBytes)
+        {
+            // we explicitly don't handle the remaining bits here, we only copy fully usable range
+            var bytesCopied = Header->UncompressedBitsPosition / 8;
+
+            var totalUncompressedSize = Header->UncompressedSize + bytesCopied;
+            if (totalUncompressedSize >= ushort.MaxValue)
+                return false; // we don't allow compressed segments whose uncompressed size is > 64Kb
+
+
+            using (allocator.Allocate(totalUncompressedSize, out var uncompressedBuffer))
+            using (allocator.Allocate(LZ4.MaximumOutputLength(totalUncompressedSize), out var compressedBuffer))
+            {
+                if (Header->CompressedSize > 0)
+                {
+                    LZ4.Decode64(
+                        CompressedBuffer, Header->CompressedSize,
+                        uncompressedBuffer.Ptr, Header->UncompressedSize,
+                        knownOutputLength: true);// will throw if not equal
+                }
+
+                Memory.Copy(uncompressedBuffer.Ptr + Header->UncompressedSize, _buffer,
+                   bytesCopied);
+
+                var len = LZ4.Encode64(
+                    uncompressedBuffer.Ptr, compressedBuffer.Ptr,
+                    uncompressedBuffer.Length, compressedBuffer.Length);
+
+                if (len >= Size - sizeof(BitsBufferHeader) - 1 /*last byte bits*/ - requiredBytes || // doesn't give us enough
+                    len >= ushort.MaxValue) // just to be safe, Size should always be smaller anyway
+                    return false;
+
+                Header->CompressedSize = (ushort)len;
+                Header->UncompressedSize = (ushort)totalUncompressedSize;
+                byte lastByte = Buffer[Header->UncompressedBitsPosition >> 3];
+                Header->UncompressedBitsPosition %= 8;
+                Memory.Copy(CompressedBuffer, compressedBuffer.Ptr, len);
+                _buffer = CompressedBuffer + len;
+                Buffer[0] = lastByte;
+
+                return true;
+            }
         }
 
         public bool HasEnoughBits(int bitsPosition, int numberOfBits)
         {
-            return bitsPosition + numberOfBits <= Size * 8;
+            return bitsPosition + numberOfBits <= (Size - Header->CompressedSize) * 8;
         }
 
 
         public BitsBuffer(byte* buffer, int size)
         {
             Header = (BitsBufferHeader*)buffer;
-            Buffer = buffer + sizeof(BitsBufferHeader);
+            _buffer = buffer + sizeof(BitsBufferHeader) + Header->CompressedSize;
             Size = size;
         }
 
@@ -62,9 +126,20 @@ namespace Raven.Server.Documents.TimeSeries
 
             return bits;
         }
+        public ulong ReadValue(int bitsPosition, int bitsToRead)
+        {
+            var old = Header->CompressedSize;
+            Header->CompressedSize = 0;
+            var v =  ReadValue(ref bitsPosition, bitsToRead);
+            Header->CompressedSize = old;
+            return v;
+        }
 
         public ulong ReadValue(ref int bitsPosition, int bitsToRead)
         {
+            if(Header->CompressedSize != 0)
+                throw new ArgumentException($"Cannot read from a compressed bits buffer");
+
             if (bitsToRead > 64)
                 throw new ArgumentException($"Unable to read more than 64 bits at a time.  Requested {bitsToRead} bits", nameof(bitsToRead));
 
@@ -106,7 +181,7 @@ namespace Raven.Server.Documents.TimeSeries
 
         public void AddValue(ulong value, int bitsInValue)
         {
-            Debug.Assert(HasAdditionalBits(bitsInValue));
+            Debug.Assert(EnsureAdditionalBits(null, bitsInValue));
 
             if (bitsInValue == 0)
             {
@@ -114,10 +189,10 @@ namespace Raven.Server.Documents.TimeSeries
                 return;
             }
 
-            var lastByteIndex = Header->BitsPosition / 8;
+            var lastByteIndex = Header->UncompressedBitsPosition / 8;
             var bitsAvailable = BitsAvailableInLastByte();
 
-            Header->BitsPosition += (ushort)bitsInValue;
+            Header->UncompressedBitsPosition += (ushort)bitsInValue;
 
             WriteBits(value, bitsInValue, lastByteIndex, bitsAvailable);
         }
@@ -158,9 +233,9 @@ namespace Raven.Server.Documents.TimeSeries
             }
         }
 
-        internal bool AddBits(BitsBuffer tempBitsBuffer)
+        internal bool AddBits(ByteStringContext allocator, BitsBuffer tempBitsBuffer)
         {
-            if (HasAdditionalBits(tempBitsBuffer.NumberOfBits) == false)
+            if (EnsureAdditionalBits(allocator, tempBitsBuffer.NumberOfBits) == false)
                 return false;
 
             int read = 0;
@@ -172,6 +247,27 @@ namespace Raven.Server.Documents.TimeSeries
             }
 
             return true;
+        }
+
+        internal ByteStringContext.InternalScope Uncompress(ByteStringContext allocator, out BitsBuffer bitsBuffer)
+        {
+            var size = Header->UncompressedSize + UncompressedBitsInBytes + sizeof(BitsBufferHeader);
+            ByteStringContext.InternalScope scope = allocator.Allocate(size, out var buffer);
+            Memory.Set(buffer.Ptr, 0, buffer.Length);
+            if (Header->CompressedSize > 0)
+            {
+                LZ4.Decode64(CompressedBuffer, Header->CompressedSize,
+                buffer.Ptr + sizeof(BitsBufferHeader), Header->UncompressedSize,
+                knownOutputLength: true);
+            }
+            Memory.Copy(buffer.Ptr + sizeof(BitsBufferHeader) + Header->UncompressedSize, _buffer, UncompressedBitsInBytes);
+
+            var bufferHeader = (BitsBufferHeader*)buffer.Ptr;
+            bufferHeader->UncompressedBitsPosition = (Header->UncompressedBitsPosition + Header->UncompressedSize * 8);
+
+            bitsBuffer = new BitsBuffer(buffer.Ptr, buffer.Length);
+
+            return scope;
         }
     }
 }

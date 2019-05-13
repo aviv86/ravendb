@@ -31,8 +31,8 @@ namespace Tryouts
     {
         public static async Task Main(string[] args)
         {
-            using (var test = new TimeSeriesTests())
-                test.CanStoreAndReadMultipleTimestamps();
+            using (var test = new TimeSeriesRangeTests())
+                test.BitBufferCanHandleLargeValuesAndCompression();
 
             //var store = new DocumentStore
             //{
