@@ -651,7 +651,7 @@ namespace Raven.Server.Documents.Indexes
                 }
                 catch (ObjectDisposedException ode)
                 {
-                    if(_disposeOne.Disposed == false)
+                    if (_disposeOne.Disposed == false)
                     {
                         ReportUnexpectedIndexingError(ode);
                     }

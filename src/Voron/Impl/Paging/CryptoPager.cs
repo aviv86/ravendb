@@ -160,7 +160,7 @@ namespace Voron.Impl.Paging
 
             DecryptPage((PageHeader*)buffer.Pointer);
 
-            if(Sodium.crypto_generichash(buffer.Hash, EncryptionBuffer.HashSize, buffer.Pointer, (ulong)buffer.Size, null, UIntPtr.Zero) != 0)
+            if (Sodium.crypto_generichash(buffer.Hash, EncryptionBuffer.HashSize, buffer.Pointer, (ulong)buffer.Size, null, UIntPtr.Zero) != 0)
                 ThrowInvalidHash();
             
             return buffer.Pointer;
@@ -266,7 +266,7 @@ namespace Voron.Impl.Paging
                 if (buffer.Value.SkipOnTxCommit)
                     continue;
 
-                if(Sodium.crypto_generichash(pageHash, EncryptionBuffer.HashSize, buffer.Value.Pointer, (ulong)buffer.Value.Size, null, UIntPtr.Zero) != 0)
+                if (Sodium.crypto_generichash(pageHash, EncryptionBuffer.HashSize, buffer.Value.Pointer, (ulong)buffer.Value.Size, null, UIntPtr.Zero) != 0)
                     ThrowInvalidHash();
 
                 if (Sodium.sodium_memcmp(pageHash, buffer.Value.Hash, EncryptionBuffer.HashSize) == 0)

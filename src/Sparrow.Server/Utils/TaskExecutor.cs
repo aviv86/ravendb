@@ -116,7 +116,7 @@ namespace Sparrow.Server.Utils
                 if (callback == null)
                     return;
 
-                if(Interlocked.CompareExchange(ref _callback, null, callback) != callback)
+                if (Interlocked.CompareExchange(ref _callback, null, callback) != callback)
                     return;
 
                 callback(state);

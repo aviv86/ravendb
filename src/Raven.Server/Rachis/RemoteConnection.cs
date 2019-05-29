@@ -443,7 +443,7 @@ namespace Raven.Server.Rachis
             {
                 RemoteConnectionsList.TryRemove(_info);
                 _stream?.Dispose();
-                if(_buffer is IDisposable s)
+                if (_buffer is IDisposable s)
                     s.Dispose();
             }
         }

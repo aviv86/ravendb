@@ -720,7 +720,7 @@ namespace Raven.Server.Rachis
 
         private void ParallelDispose(List<IDisposable> toDispose)
         {
-            if(toDispose == null || toDispose.Count == 0)
+            if (toDispose == null || toDispose.Count == 0)
                 return;
 
             Parallel.ForEach(toDispose, d =>
@@ -1704,7 +1704,7 @@ namespace Raven.Server.Rachis
                 if (CurrentState != RachisState.Passive)
                     return;
 
-                if(_tag == InitialTag)
+                if (_tag == InitialTag)
                 {
                     UpdateNodeTag(ctx, nodeTag);
                 }
@@ -1888,7 +1888,7 @@ namespace Raven.Server.Rachis
 
         private unsafe void SetClusterBase(string str)
         {
-            if(str == null)
+            if (str == null)
                 return;
 
             var guid = new Guid(str);

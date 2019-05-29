@@ -179,7 +179,7 @@ namespace Raven.Server.Rachis
 
                                     while (connectTask.Wait(1000) == false)
                                     {
-                                        if(_leader.Running == false)
+                                        if (_leader.Running == false)
                                             return;
 
                                         if (_running == false)

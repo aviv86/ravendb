@@ -1394,7 +1394,7 @@ namespace Raven.Server.Documents.Queries
             if (fe.Compound.Count == 1)
                 return new QueryFieldName(fe.Compound[0].Value, fe.IsQuoted);
            
-            if(RootAliasPaths.TryGetValue(fe.Compound[0], out _))
+            if (RootAliasPaths.TryGetValue(fe.Compound[0], out _))
             {
                 if (fe.Compound.Count == 2)
                 {
