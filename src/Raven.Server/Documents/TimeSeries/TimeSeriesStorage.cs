@@ -488,9 +488,9 @@ namespace Raven.Server.Documents.TimeSeries
                 var segmentReadOnlyBuffer = tvr.Read((int)TimeSeriesTable.Segment, out int size);
                 var readOnlySegment = new TimeSeriesValuesSegment(segmentReadOnlyBuffer, size);
 
-                if(readOnlySegment.NumberOfValues != values.Length)
+                if (readOnlySegment.NumberOfValues != values.Length)
                 {
-                    if(readOnlySegment.NumberOfValues > values.Length)
+                    if (readOnlySegment.NumberOfValues > values.Length)
                     {
                         using (context.Allocator.Allocate(readOnlySegment.NumberOfValues * sizeof(double), out ByteString fullValuesBuffer))
                         {
