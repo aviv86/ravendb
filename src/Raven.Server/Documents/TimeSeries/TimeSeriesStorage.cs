@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using Raven.Server.Commercial;
+using Raven.Client;
 using Raven.Server.ServerWide.Context;
 using Raven.Server.Utils;
 using Sparrow;
 using Sparrow.Binary;
 using Sparrow.Json;
+using Sparrow.Json.Parsing;
 using Sparrow.Server;
 using Sparrow.Server.Utils;
 using Voron;
@@ -29,7 +30,6 @@ namespace Raven.Server.Documents.TimeSeries
         {
             TableType = (byte)TableType.TimeSeries
         };
-
 
         private readonly DocumentDatabase _documentDatabase;
         private readonly DocumentsStorage _documentsStorage;
@@ -106,7 +106,7 @@ namespace Raven.Server.Documents.TimeSeries
                     // because we might be deleting the segment and lose its key and thus
                     // our position in the range
                     Table.TableValueHolder nextSegment = null;
-                    if(upcomingSegment != null)
+                    if (upcomingSegment != null)
                     {
                         nextSegment = upcomingSegment;
                         upcomingSegment = TryGetNextSegment(ref upcomingSegment.Reader);
@@ -140,7 +140,7 @@ namespace Raven.Server.Documents.TimeSeries
                     if (from > end)
                         return false;
 
-                    if(baseline < from || to < end)
+                    if (baseline < from || to < end)
                     {
                         // need to do a partial delete from the segment
                         FilterSegment(readOnlySegment, baseline, new Span<byte>(key, keySize));
@@ -218,6 +218,7 @@ namespace Raven.Server.Documents.TimeSeries
                 }
 
             }
+
         }
 
         public Reader GetReader(DocumentsOperationContext context, string documentId, string name, DateTime from, DateTime to)
@@ -459,7 +460,7 @@ namespace Raven.Server.Documents.TimeSeries
                 out timeSeriesKeyBuffer))
             using (CreateTimeSeriesKeyPrefixSlice(context, timeSeriesKeyBuffer, documentKeyPrefix, timeSeriesName, out timeSeriesPrefixSlice))
             using (CreateTimeSeriesKeySlice(context, timeSeriesKeyBuffer, timeSeriesPrefixSlice, timestamp, out timeSeriesKeySlice))
-            using(context.Allocator.Allocate(MaxSegmentSize, out buffer))
+            using (context.Allocator.Allocate(MaxSegmentSize, out buffer))
             {
                 Memory.Set(buffer.Ptr, 0, MaxSegmentSize);
 
@@ -500,6 +501,7 @@ namespace Raven.Server.Documents.TimeSeries
                             {
                                 fullValues[i] = double.NaN;
                             }
+
                             return AppendTimestamp(context, documentId, collection, name, timestamp, fullValues, tag, fromReplication);
                         }
                     }
@@ -536,7 +538,7 @@ namespace Raven.Server.Documents.TimeSeries
                     return AppendNewSegment(values);
                 }
 
-                return SplitSegment(readOnlySegment, values,baseline, updatedValuesNewSize: 0);
+                return SplitSegment(readOnlySegment, values, baseline, updatedValuesNewSize: 0);
             }
 
             string SplitSegment(TimeSeriesValuesSegment segmentToSplit, Span<double> valuesCopy, DateTime baseline, int updatedValuesNewSize)
@@ -555,7 +557,6 @@ namespace Raven.Server.Documents.TimeSeries
                     var splitSegment = new TimeSeriesValuesSegment(buffer.Ptr, MaxSegmentSize);
                     splitSegment.Initialize(valuesCopy.Length);
 
-
                     var valuesBuffer = stackalloc double[readOnlySegment.NumberOfValues + updatedValuesNewSize];
                     var currentValues = new Span<double>(valuesBuffer, readOnlySegment.NumberOfValues);
                     var updatedValues = new Span<double>(valuesBuffer, readOnlySegment.NumberOfValues + updatedValuesNewSize);
@@ -563,7 +564,7 @@ namespace Raven.Server.Documents.TimeSeries
                     var state = new Span<TimeStampState>(stateBuffer, readOnlySegment.NumberOfValues);
                     var currentTag = new TimeSeriesValuesSegment.TagPointer();
 
-                    for (int i = readOnlySegment.NumberOfValues; i < readOnlySegment.NumberOfValues+ updatedValuesNewSize; i++)
+                    for (int i = readOnlySegment.NumberOfValues; i < readOnlySegment.NumberOfValues + updatedValuesNewSize; i++)
                     {
                         updatedValues[i] = double.NaN;
                     }
@@ -586,11 +587,11 @@ namespace Raven.Server.Documents.TimeSeries
                                         offset += currentTimestamp;
                                         changeVector = FlushCurrentSegment(ref splitSegment, updatedValues, currentTag.AsSpan(), baseline);
                                     }
+
                                     continue;
                                 }
 
                                 alreadyAdded = true;
-
 
                                 var shouldAdd = true;
 
@@ -610,7 +611,6 @@ namespace Raven.Server.Documents.TimeSeries
                                 }
                             }
 
-
                             if (splitSegment.Append(context.Allocator, currentTimestamp - offset, updatedValues, currentTag.AsSpan()) == false)
                             {
                                 baseline = baseline.AddMilliseconds(currentTimestamp);
@@ -620,7 +620,7 @@ namespace Raven.Server.Documents.TimeSeries
                         }
                     }
 
-                    if(alreadyAdded == false)
+                    if (alreadyAdded == false)
                     {
                         AddCurrentValue(valuesCopy, updatedValues);
                     }
@@ -669,7 +669,9 @@ namespace Raven.Server.Documents.TimeSeries
                     table.Insert(tvb);
                 }
 
+                AddTimeSeriesNameToMetadata(context, documentId, name);
                 return changeVector;
+
             }
 
             void AppendExistingSegment(TimeSeriesValuesSegment segment)
@@ -679,7 +681,7 @@ namespace Raven.Server.Documents.TimeSeries
                 // the key came from the existing value, have to clone it
                 using (Slice.From(context.Allocator, key, keySize, out var keySlice))
                 using (table.Allocate(out TableValueBuilder tvb))
-            using (DocumentIdWorker.GetStringPreserveCase(context, collectionName.Name, out var collectionSlice))
+                using (DocumentIdWorker.GetStringPreserveCase(context, collectionName.Name, out var collectionSlice))
                 using (Slice.From(context.Allocator, changeVector, out Slice cv))
                 {
                     tvb.Add(keySlice);
@@ -710,6 +712,75 @@ namespace Raven.Server.Documents.TimeSeries
                 if (result == false)
                     throw new InvalidOperationException($"After renewal of segment, was unable to append a new value. Shouldn't happen. Doc: {documentId}, name: {name}");
                 return changeVector;
+            }
+
+            void AddTimeSeriesNameToMetadata(DocumentsOperationContext ctx, string docId, string tsName)
+            {
+                var doc = _documentDatabase.DocumentsStorage.Get(ctx, docId);
+                if (doc == null)
+                    return;
+
+                var data = doc.Data;
+                BlittableJsonReaderArray tsNames = null;
+                if (doc.TryGetMetadata(out var metadata))
+                {
+                    metadata.TryGet(Constants.Documents.Metadata.TimeSeries, out tsNames);
+                }
+
+                if (tsNames == null)
+                {
+                    data.Modifications = new DynamicJsonValue(data);
+                    if (metadata == null)
+                    {
+                        data.Modifications[Constants.Documents.Metadata.Key] = new DynamicJsonValue
+                        {
+                            [Constants.Documents.Metadata.TimeSeries] = new[] {tsName}
+                        };
+                    }
+                    else
+                    {
+                        metadata.Modifications = new DynamicJsonValue(metadata)
+                        {
+                            [Constants.Documents.Metadata.TimeSeries] = new[] {tsName}
+                        };
+                        data.Modifications[Constants.Documents.Metadata.Key] = metadata;
+                    }
+                }
+                else
+                {
+                    var tsNamesList = new List<string>(tsNames.Length + 1);
+                    for (var i = 0; i < tsNames.Length; i++)
+                    {
+                        var val = tsNames.GetStringByIndex(i);
+                        if (val == null)
+                            continue;
+                        tsNamesList.Add(val);
+                    }
+
+                    var location = tsNames.BinarySearch(tsName, StringComparison.Ordinal);
+                    if (location >= 0)
+                        return;
+
+                    tsNamesList.Insert(~location, tsName);
+
+                    data.Modifications = new DynamicJsonValue(data);
+
+                    metadata.Modifications = new DynamicJsonValue(metadata)
+                    {
+                        [Constants.Documents.Metadata.TimeSeries] = tsNamesList
+                    };
+
+                    data.Modifications[Constants.Documents.Metadata.Key] = metadata;
+                }
+
+                var flags = doc.Flags.Strip(DocumentFlags.FromClusterTransaction | DocumentFlags.Resolved);
+                flags |= DocumentFlags.HasTimeSeries;
+
+                using (data)
+                {
+                    var newDocumentData = ctx.ReadObject(doc.Data, docId, BlittableJsonDocumentBuilder.UsageMode.ToDisk);
+                    _documentDatabase.DocumentsStorage.Put(ctx, docId, null, newDocumentData, flags: flags);
+                }
             }
         }
 
