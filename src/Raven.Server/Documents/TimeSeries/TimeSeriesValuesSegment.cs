@@ -95,6 +95,8 @@ namespace Raven.Server.Documents.TimeSeries
             if (tag.Length > byte.MaxValue)
                 ThrowInvalidTagLength();
 
+            if (Header->NumberOfEntries == ushort.MaxValue)
+                return false;
 
             var maximumSize =
                 sizeof(BitsBufferHeader) +
