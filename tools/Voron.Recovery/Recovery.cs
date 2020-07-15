@@ -950,69 +950,57 @@ namespace Voron.Recovery
                 return;
             }
 
-            var orphans = new Dictionary<string, HashSet<string>>();
             if (_documentsTimeSeries.Count == 0)
             {
-                foreach (var (name, docId) in _uniqueTimeSeriesDiscovered)
+                foreach (var kvp in _uniqueTimeSeriesDiscovered)
                 {
-                    if (_previouslyWrittenDocs.ContainsKey(docId))
+                    if (_previouslyWrittenDocs.ContainsKey(kvp.Key))
                         continue;
 
-                    AddOrphanTimeSeries(orphans, docId, name);
+                    // orphan time-series
+                    WriteDummyDocumentForTimeSeries(documentWriter, kvp.Key, kvp.Value);
                 }
-
-                ReportOrphanTimeSeriesDocumentIds(orphans, documentWriter);
                 return;
             }
             writer.WriteLine("Starting to compute orphan and missing time-series. this may take a while.");
             if (ct.IsCancellationRequested)
-            {
                 return;
-            }
-            _documentsTimeSeries.Sort((x, y) => Compare(x.docId + SpecialChars.RecordSeparator + x.name,
-                y.docId + SpecialChars.RecordSeparator + y.name, StringComparison.OrdinalIgnoreCase));
+            
+            _documentsTimeSeries.Sort((x, y) => Compare(x.DocId + SpecialChars.RecordSeparator + x.Name,
+                y.DocId + SpecialChars.RecordSeparator + y.Name, StringComparison.OrdinalIgnoreCase));
             //We rely on the fact that the time-series id+name is unique in the _uniqueTimeSeriesDiscovered list (no duplicated values).
             int index = 0;
-            foreach (var (name, docId) in _uniqueTimeSeriesDiscovered)
+            foreach (var (docId, names) in _uniqueTimeSeriesDiscovered)
             {
-                if (_previouslyWrittenDocs.ContainsKey(docId))
-                    continue;
+                if (_previouslyWrittenDocs.ContainsKey(docId) == false)
+                {
+                    // orphan time-series
+                    WriteDummyDocumentForTimeSeries(documentWriter, docId, names);
+                }
 
-                var discoveredKey = docId + SpecialChars.RecordSeparator + name;
-                if (ct.IsCancellationRequested)
+                foreach (var name in names)
                 {
-                    return;
-                }
-                var foundEqual = false;
-                while (_documentsTimeSeries.Count > index)
-                {
-                    var timeSeriesKey = _documentsTimeSeries[index].docId + SpecialChars.RecordSeparator + _documentsTimeSeries[index].name;
-                    var compareResult = Compare(discoveredKey, timeSeriesKey, StringComparison.OrdinalIgnoreCase);
-                    if (compareResult == 0)
+                    var discoveredKey = docId + SpecialChars.RecordSeparator + name;
+                    if (ct.IsCancellationRequested)
+                        return;
+                    
+                    while (_documentsTimeSeries.Count > index)
                     {
-                        index++;
-                        foundEqual = true;
-                        continue;
-                    }
-                    if (compareResult > 0)
-                    {
-                        //this is the case where we have a document with a counter that wasn't recovered
-                        if (_logger.IsOperationsEnabled)
-                            _logger.Operations($"Document {_documentsTimeSeries[index].docId} contains a time-series with name {_documentsTimeSeries[index].name} but we were not able to recover such time-series.");
-                        index++;
-                        continue;
-                    }
-                    break;
-                }
-                if (foundEqual == false)
-                {
-                    AddOrphanTimeSeries(orphans, docId, name);
-                }
-            }
+                        var timeSeriesKey = _documentsTimeSeries[index].DocId + SpecialChars.RecordSeparator + _documentsTimeSeries[index].Name;
+                        var compareResult = Compare(discoveredKey, timeSeriesKey, StringComparison.OrdinalIgnoreCase);
+                        if (compareResult < 0)
+                            break;
 
-            if (orphans.Count > 0)
-            {
-                ReportOrphanTimeSeriesDocumentIds(orphans, documentWriter);
+                        if (compareResult > 0)
+                        {
+                            // missing time-series - found a document with time-series that wasn't recovered
+                            if (_logger.IsOperationsEnabled)
+                                _logger.Operations($"Document {_documentsTimeSeries[index].DocId} contains a time-series with name {_documentsTimeSeries[index].Name} but we were not able to recover such time-series.");
+                        }
+
+                        index++;
+                    }
+                }
             }
         }
 
@@ -1032,16 +1020,18 @@ namespace Voron.Recovery
             {
                 foreach (var kvp in _uniqueCountersDiscovered)
                 {
+                    if (_previouslyWrittenDocs.ContainsKey(kvp.Key))
+                        continue;
+
+                    // orphan counters
                     WriteDummyDocumentForCounters(documentWriter, kvp.Key, kvp.Value);
                 }
-
                 return;
             }
             writer.WriteLine("Starting to compute orphan and missing counters. this may take a while.");
             if (ct.IsCancellationRequested)
-            {
                 return;
-            }
+            
             _documentsCounters.Sort((x, y) => Compare(x.DocId + SpecialChars.RecordSeparator + x.Name,
                 y.DocId + SpecialChars.RecordSeparator + y.Name, StringComparison.OrdinalIgnoreCase));
             //We rely on the fact that the counter id+name is unique in the _discoveredCounters list (no duplicated values).
@@ -1058,9 +1048,8 @@ namespace Voron.Recovery
                 {
                     var discoveredKey = docId + SpecialChars.RecordSeparator + name;
                     if (ct.IsCancellationRequested)
-                    {
                         return;
-                    }
+                    
                     while (_documentsCounters.Count > index)
                     {
                         var documentsCountersKey = _documentsCounters[index].DocId + SpecialChars.RecordSeparator + _documentsCounters[index].Name;
@@ -1152,6 +1141,56 @@ namespace Voron.Recovery
             }
         }
 
+        private void WriteDummyDocumentForTimeSeries(BlittableJsonTextWriter writer, string docId, IEnumerable<string> timeSeries)
+        {
+            if (_documentWritten)
+                writer.WriteComma();
+            //start metadata
+            writer.WriteStartObject();
+            writer.WritePropertyName(Raven.Client.Constants.Documents.Metadata.Key);
+            writer.WriteStartObject();
+            //collection name
+            writer.WritePropertyName(Raven.Client.Constants.Documents.Metadata.Collection);
+            writer.WriteString(EmptyCollection);
+            writer.WriteComma();
+            //id
+            writer.WritePropertyName(Raven.Client.Constants.Documents.Metadata.Id);
+            writer.WriteString(docId);
+            writer.WriteComma();
+            //change vector
+            writer.WritePropertyName(Raven.Client.Constants.Documents.Metadata.ChangeVector);
+            writer.WriteString(Empty);
+            writer.WriteComma();
+            //flags
+            writer.WritePropertyName(Raven.Client.Constants.Documents.Metadata.Flags);
+            writer.WriteString(DocumentFlags.HasTimeSeries.ToString());
+            writer.WriteComma();
+            //start time-series
+            writer.WritePropertyName(Raven.Client.Constants.Documents.Metadata.TimeSeries);
+            //start counters array
+            writer.WriteStartArray();
+            var first = true;
+            foreach (var ts in timeSeries)
+            {
+                if (first == false)
+                    writer.WriteComma();
+                first = false;
+
+                if (_logger.IsOperationsEnabled)
+                    _logger.Operations($"Found orphan time-series with docId= {docId} and name={ts}.");
+
+                writer.WriteString(ts);
+            }
+
+            // end time-series array
+            writer.WriteEndArray();
+            //end metadata
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+
+            _lastWriteIsDocument = true;
+            _documentWritten = true;
+        }
 
         private long _attachmentNumber = 0;
         private readonly List<(string hash, string tag, long size)> _attachmentsHashs = new List<(string, string, long)>();
@@ -1345,7 +1384,14 @@ namespace Voron.Recovery
                     _logger.Info($"Found time-series segment with document Id={item.DocId} and time-series={item.Name}");
 
                 _lastRecoveredDocumentKey = item.DocId;
-                _uniqueTimeSeriesDiscovered.Add((null, item.DocId));
+
+                if (_uniqueTimeSeriesDiscovered.TryGetValue(item.DocId, out var hs) == false)
+                {
+                    _uniqueTimeSeriesDiscovered[item.DocId] = hs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+
+                hs.Add(item.Name);
+
                 _numberOfTimeSeriesSegmentsRetrieved++;
 
                 return true;
@@ -1402,29 +1448,29 @@ namespace Voron.Recovery
 
                 _lastRecoveredDocumentKey = counterGroup.DocumentId;
 
-                if (counterGroup.Values.TryGet(CountersStorage.Values, out BlittableJsonReaderObject countersData) == false)
+                if (counterGroup.Values.TryGet(CountersStorage.CounterNames, out BlittableJsonReaderObject countersNamesDoc) == false)
                 {
                     if (_logger.IsInfoEnabled)
                     {
                         using (var key = DocumentsStorage.TableValueToString(context, (int)CountersStorage.CountersTable.CounterKey, ref tvr))
                         {
                             _logger.Info(
-                                $"Found counter-group item (key = '{key}') with counter-data document that is missing '{CountersStorage.Values}' property.");
+                                $"Found counter-group item (key = '{key}') with counter-data document that is missing '{CountersStorage.CounterNames}' property.");
                         }
                     }
 
                     return true;
                 }
 
-                var names = countersData.GetPropertyNames();
+                var names = GetCounterNames(countersNamesDoc);
 
                 if (_uniqueCountersDiscovered.TryGetValue(counterGroup.DocumentId, out var list) == false)
                 {
                     _uniqueCountersDiscovered[counterGroup.DocumentId] = list = new List<string>();
                 }
-                list.AddRange(names);
 
-                _numberOfCountersRetrieved += names.Length;
+                list.AddRange(names);
+                _numberOfCountersRetrieved += names.Count;
 
                 return true;
             }
@@ -1434,6 +1480,19 @@ namespace Voron.Recovery
                     _logger.Operations($"Unexpected exception while writing counter item at position {GetFilePosition(startOffset, mem)}: {e}");
                 return false;
             }
+        }
+
+        private static List<string> GetCounterNames(BlittableJsonReaderObject namesDocument)
+        {
+            var names = new List<string>(namesDocument.Count);
+            var propertyDetails = new BlittableJsonReaderObject.PropertyDetails();
+            for (var i = 0; i < namesDocument.Count; i++)
+            {
+                namesDocument.GetPropertyByIndex(i, ref propertyDetails);
+                names.Add(propertyDetails.Value.ToString());
+            }
+
+            return names;
         }
 
         private bool WriteDocument(byte* mem, int sizeInBytes, BlittableJsonTextWriter writer, JsonOperationContext context, long startOffset)
@@ -1689,9 +1748,9 @@ namespace Voron.Recovery
         private readonly Dictionary<string, long> _previouslyWrittenDocs;
         private readonly List<(string Hash, string DocId)> _documentsAttachments = new List<(string Hash, string DocId)>();
         private readonly List<(string Name, string DocId)> _documentsCounters = new List<(string Name, string DocId)>();
-        private readonly Dictionary<string, List<string>> _uniqueCountersDiscovered = new Dictionary<string, List<string>>(OrdinalIgnoreCaseStringStructComparer.Instance);
-        private readonly List<(string name, string docId)> _documentsTimeSeries = new List<(string name, string docId)>();
-        private readonly SortedSet<(string name, string docId)> _uniqueTimeSeriesDiscovered = new SortedSet<(string name, string docId)>(new CaseInsensitiveDocIdAndNameComparer());
+        private readonly Dictionary<string, List<string>> _uniqueCountersDiscovered = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        private readonly List<(string Name, string DocId)> _documentsTimeSeries = new List<(string Name, string DocId)>();
+        private readonly Dictionary<string, HashSet<string>> _uniqueTimeSeriesDiscovered = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
         private long _numberOfCountersRetrieved;
         private long _numberOfTimeSeriesSegmentsRetrieved;
