@@ -121,7 +121,12 @@ namespace Raven.Server.ServerWide
             [nameof(UnregisterReplicationHubAccessCommand)] = 51_000,
             [nameof(PutServerWideExternalReplicationCommand)] = 51_000,
             [nameof(DeleteServerWideTaskCommand)] = 51_000,
-            [nameof(ToggleServerWideTaskStateCommand)] = 51_000
+            [nameof(ToggleServerWideTaskStateCommand)] = 51_000,
+
+            [nameof(AddS3EtlCommand)] = 52_000,
+            [nameof(PutS3ConnectionStringCommand)] = 52_000,
+            [nameof(RemoveS3ConnectionStringCommand)] = 52_000
+
         };
 
         public static bool CanPutCommand(string command)
