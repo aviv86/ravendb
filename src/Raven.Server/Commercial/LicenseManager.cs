@@ -1310,6 +1310,11 @@ namespace Raven.Server.Commercial
             const string message = "Your current license doesn't include the SQL ETL feature";
             throw GenerateLicenseLimit(LimitType.SqlEtl, message);
         }
+        
+        public void AssertCanAddS3Etl()
+        {
+            // todo
+        }
 
         public bool CanUseSnmpMonitoring(bool withNotification)
         {

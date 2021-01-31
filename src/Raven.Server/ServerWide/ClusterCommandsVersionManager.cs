@@ -124,6 +124,7 @@ namespace Raven.Server.ServerWide
             [nameof(ToggleServerWideTaskStateCommand)] = 51_000,
 
             [nameof(AddS3EtlCommand)] = 52_000,
+            [nameof(UpdateS3EtlCommand)] = 52_000,
             [nameof(PutS3ConnectionStringCommand)] = 52_000,
             [nameof(RemoveS3ConnectionStringCommand)] = 52_000
 
