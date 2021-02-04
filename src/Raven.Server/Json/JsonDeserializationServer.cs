@@ -43,6 +43,7 @@ using Raven.Server.Web.Studio;
 using Raven.Server.Web.System;
 using Raven.Server.ServerWide;
 using Raven.Client.Documents.Indexes.TimeSeries;
+using Raven.Client.Documents.Operations.ETL;
 using Raven.Client.Documents.Operations.TimeSeries;
 using Raven.Server.Smuggler.Documents;
 
@@ -179,6 +180,8 @@ namespace Raven.Server.Json
         public static readonly Func<BlittableJsonReaderObject, RavenServer.CpuCreditsResponse> CpuCreditsResponse = GenerateJsonDeserializationRoutine<RavenServer.CpuCreditsResponse>();
 
         public static readonly Func<BlittableJsonReaderObject, LocalSettings> LocalSettings = GenerateJsonDeserializationRoutine<LocalSettings>();
+
+        public static readonly Func<BlittableJsonReaderObject, ParquetEtlLocalSettings> ParquetEtlLocalSettings = GenerateJsonDeserializationRoutine<ParquetEtlLocalSettings>();
 
         public static readonly Func<BlittableJsonReaderObject, S3Settings> S3Settings = GenerateJsonDeserializationRoutine<S3Settings>();
 
