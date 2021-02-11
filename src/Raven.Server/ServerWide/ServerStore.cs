@@ -1880,7 +1880,7 @@ namespace Raven.Server.ServerWide
                         command = new AddSqlEtlCommand(sqlEtl, databaseName, raftRequestId);
                         break;
 
-                    case EtlType.Parquet:
+                    case EtlType.Olap:
                         var parquetEtl = JsonDeserializationCluster.ParquetEtlConfiguration(etlConfiguration);
                         parquetEtl.Validate(out var parquetEtlErr, validateName: false, validateConnection: false);
                         if (ValidateConnectionString(rawRecord, parquetEtl.ConnectionStringName, parquetEtl.EtlType) == false)
@@ -1888,7 +1888,7 @@ namespace Raven.Server.ServerWide
 
                         ThrowInvalidConfigurationIfNecessary(etlConfiguration, parquetEtlErr);
 
-                        command = new AddParquetEtlCommand(parquetEtl, databaseName, raftRequestId);
+                        command = new AddOlapEtlCommand(parquetEtl, databaseName, raftRequestId);
                         break;
 
                     default:
@@ -1932,8 +1932,8 @@ namespace Raven.Server.ServerWide
                 case EtlType.Sql:
                     var sqlConnectionString = databaseRecord.SqlConnectionStrings;
                     return sqlConnectionString != null && sqlConnectionString.TryGetValue(connectionStringName, out _);
-                case EtlType.Parquet:
-                    var s3ConnectionString = databaseRecord.ParquetEtlConnectionStrings;
+                case EtlType.Olap:
+                    var s3ConnectionString = databaseRecord.OlapEtlConnectionString;
                     return s3ConnectionString != null && s3ConnectionString.TryGetValue(connectionStringName, out _);
             }
 
@@ -1972,7 +1972,7 @@ namespace Raven.Server.ServerWide
 
                         command = new UpdateSqlEtlCommand(id, sqlEtl, databaseName, raftRequestId);
                         break;
-                    case EtlType.Parquet:
+                    case EtlType.Olap:
 
                         var parquetEtl = JsonDeserializationCluster.ParquetEtlConfiguration(etlConfiguration);
                         parquetEtl.Validate(out var s3EtlErr, validateName: false, validateConnection: false);
@@ -1981,7 +1981,7 @@ namespace Raven.Server.ServerWide
 
                         ThrowInvalidConfigurationIfNecessary(etlConfiguration, s3EtlErr);
 
-                        command = new UpdateParquetEtlCommand(id, parquetEtl, databaseName, raftRequestId);
+                        command = new UpdateOlapEtlCommand(id, parquetEtl, databaseName, raftRequestId);
                         break;
                     default:
                         throw new NotSupportedException($"Unknown ETL configuration type. Configuration: {etlConfiguration}");
@@ -2039,7 +2039,7 @@ namespace Raven.Server.ServerWide
                     command = new PutSqlConnectionStringCommand(JsonDeserializationCluster.SqlConnectionString(connectionString), databaseName, raftRequestId);
                     break;
                 case ConnectionStringType.Parquet:
-                    command = new PutParquetEtlConnectionStringCommand(JsonDeserializationCluster.ParquetEtlConnectionString(connectionString), databaseName, raftRequestId);
+                    command = new PutOlapEtlConnectionStringCommand(JsonDeserializationCluster.OlapEtlConnectionString(connectionString), databaseName, raftRequestId);
                     break;
                 default:
                     throw new NotSupportedException($"Unknown connection string type: {connectionStringType}");

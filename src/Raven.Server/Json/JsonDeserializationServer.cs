@@ -24,7 +24,6 @@ using Raven.Server.Documents.ETL.Providers.SQL.RelationalWriters;
 using Raven.Server.Documents.Handlers;
 using Raven.Server.Documents.Handlers.Admin;
 using Raven.Server.Documents.Handlers.Debugging;
-using Raven.Server.Documents.PeriodicBackup;
 using Raven.Server.Documents.PeriodicBackup.Restore;
 using Raven.Server.Documents.Queries;
 using Raven.Server.Documents.Studio;
@@ -181,7 +180,7 @@ namespace Raven.Server.Json
 
         public static readonly Func<BlittableJsonReaderObject, LocalSettings> LocalSettings = GenerateJsonDeserializationRoutine<LocalSettings>();
 
-        public static readonly Func<BlittableJsonReaderObject, ParquetEtlLocalSettings> ParquetEtlLocalSettings = GenerateJsonDeserializationRoutine<ParquetEtlLocalSettings>();
+        public static readonly Func<BlittableJsonReaderObject, OlapEtlLocalSettings> OlapEtlLocalSettings = GenerateJsonDeserializationRoutine<OlapEtlLocalSettings>();
 
         public static readonly Func<BlittableJsonReaderObject, S3Settings> S3Settings = GenerateJsonDeserializationRoutine<S3Settings>();
 
