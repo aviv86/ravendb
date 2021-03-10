@@ -219,6 +219,8 @@ namespace Raven.Server.Documents.Patch
             private const string _timeSeriesSignature = "timeseries(doc, name)";
             public const string GetMetadataMethod = "getMetadata";
 
+            private Dictionary<string, JsValue> _counters;
+
             public SingleRun(DocumentDatabase database, RavenConfiguration configuration, ScriptRunner runner, List<string> scriptsSource)
             {
                 _database = database;
@@ -276,10 +278,13 @@ namespace Raven.Server.Documents.Patch
                 ScriptEngine.SetValue("PutDocument", new ClrFunctionInstance(ScriptEngine, "PutDocument", ThrowOnPutDocument));
                 ScriptEngine.SetValue("cmpxchg", new ClrFunctionInstance(ScriptEngine, "cmpxchg", CompareExchange));
 
-                ScriptEngine.SetValue("counter", new ClrFunctionInstance(ScriptEngine, "counter", GetCounter));
+/*                ScriptEngine.SetValue("counter", new ClrFunctionInstance(ScriptEngine, "counter", GetCounter));
                 ScriptEngine.SetValue("counterRaw", new ClrFunctionInstance(ScriptEngine, "counterRaw", GetCounterRaw));
                 ScriptEngine.SetValue("incrementCounter", new ClrFunctionInstance(ScriptEngine, "incrementCounter", IncrementCounter));
-                ScriptEngine.SetValue("deleteCounter", new ClrFunctionInstance(ScriptEngine, "deleteCounter", DeleteCounter));
+                ScriptEngine.SetValue("deleteCounter", new ClrFunctionInstance(ScriptEngine, "deleteCounter", DeleteCounter));*/
+
+                ScriptEngine.SetValue("counters", new ClrFunctionInstance(ScriptEngine, "counters", Counters));
+
 
                 ScriptEngine.SetValue("lastModified", new ClrFunctionInstance(ScriptEngine, "lastModified", GetLastModified));
 
@@ -1101,44 +1106,67 @@ namespace Raven.Server.Documents.Patch
                 }
             }
 
-            private JsValue GetCounter(JsValue self, JsValue[] args)
+            private JsValue Counters(JsValue self, JsValue[] args)
             {
-                return GetCounterInternal(args);
+                AssertValidDatabaseContext(_timeSeriesSignature);
+
+                if (args.Length != 2)
+                    throw new ArgumentException($"{_timeSeriesSignature}: This method requires 2 arguments but was called with {args.Length}");
+
+
+                if (args[0].IsObject() == false || !(args[0].AsObject() is BlittableObjectInstance doc))
+                {
+                    ThrowInvalidDeleteCounterArgs();
+                    return JsValue.Undefined; // never hit
+                }
+
+                var id = doc.DocumentId;
+                _counters ??= new Dictionary<string, JsValue>();
+                
+                if (_counters.TryGetValue(id, out var countersFor))
+                    return countersFor;
+
+                var collection = CollectionName.GetCollectionName(doc.Blittable);
+
+                var increment = new ClrFunctionInstance(ScriptEngine, "increment", (thisObj, values) =>
+                    IncrementCounter(thisObj.Get("id").AsString(), collection, values));
+
+                var delete = new ClrFunctionInstance(ScriptEngine, "delete", (thisObj, values) =>
+                    DeleteCounter(id, collection, values));
+
+                var get = new ClrFunctionInstance(ScriptEngine, "get", (thisObj, values) =>
+                    GetCounter(id, raw: false, values));
+
+                var getRaw = new ClrFunctionInstance(ScriptEngine, "getRaw", (thisObj, values) =>
+                    GetCounter(id, raw: true, values));
+
+                var obj = new ObjectInstance(ScriptEngine);
+                obj.Set("increment", increment);
+                obj.Set("delete", delete);
+                obj.Set("get", get);
+                obj.Set("getRaw", getRaw);
+                obj.Set("id", id);
+                obj.Set("collection", collection);
+
+                _counters.Add(id, obj);
+
+                return obj;
             }
 
-            private JsValue GetCounterRaw(JsValue self, JsValue[] args)
+            private JsValue GetCounter(string id, bool raw, JsValue[] args)
             {
-                return GetCounterInternal(args, true);
-            }
-
-            private JsValue GetCounterInternal(JsValue[] args, bool raw = false)
-            {
-                var signature = raw ? "counterRaw(doc, name)" : "counter(doc, name)";
+                var signature = raw ? "counters(doc).getRaw(name)" : "counters(doc).get(name)";
                 AssertValidDatabaseContext(signature);
 
                 if (args.Length != 2)
-                    throw new InvalidOperationException($"{signature} must be called with exactly 2 arguments");
+                    throw new InvalidOperationException($"{signature} must be called with exactly 1 argument");
 
-                string id;
-                if (args[0].IsObject() && args[0].AsObject() is BlittableObjectInstance doc)
-                {
-                    id = doc.DocumentId;
-                }
-                else if (args[0].IsString())
-                {
-                    id = args[0].AsString();
-                }
-                else
-                {
-                    throw new InvalidOperationException($"{signature}: 'doc' must be a string argument (the document id) or the actual document instance itself");
-                }
-
-                if (args[1].IsString() == false)
+                if (args[0].IsString() == false)
                 {
                     throw new InvalidOperationException($"{signature}: 'name' must be a string argument");
                 }
 
-                var name = args[1].AsString();
+                var name = args[0].AsString();
                 if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name))
                 {
                     return JsValue.Undefined;
@@ -1170,57 +1198,30 @@ namespace Raven.Server.Documents.Patch
                 return rawValues;
             }
 
-            private JsValue IncrementCounter(JsValue self, JsValue[] args)
+            private JsValue IncrementCounter(string id, string collection, JsValue[] args)
             {
                 AssertValidDatabaseContext("incrementCounter");
 
-                if (args.Length < 2 || args.Length > 3)
+                if (args.Length == 0 || args.Length > 2)
                 {
                     ThrowInvalidIncrementCounterArgs(args);
                 }
 
-                var signature = args.Length == 2 ? "incrementCounter(doc, name)" : "incrementCounter(doc, name, value)";
+                var signature = args.Length == 1 ? "counters(doc).increment(name)" : "counters(doc).increment(name, value)";
 
-                BlittableJsonReaderObject docBlittable = null;
-                string id = null;
-
-                if (args[0].IsObject() && args[0].AsObject() is BlittableObjectInstance doc)
-                {
-                    id = doc.DocumentId;
-                    docBlittable = doc.Blittable;
-                }
-                else if (args[0].IsString())
-                {
-                    id = args[0].AsString();
-                    var document = _database.DocumentsStorage.Get(_docsCtx, id);
-                    if (document == null)
-                    {
-                        ThrowMissingDocument(id);
-                        Debug.Assert(false); // never hit
-                    }
-
-                    docBlittable = document.Data;
-                }
-                else
-                {
-                    ThrowInvalidDocumentArgsType(signature);
-                }
-
-                Debug.Assert(id != null && docBlittable != null);
-
-                if (args[1].IsString() == false)
+                if (args[0].IsString() == false)
                     ThrowInvalidCounterName(signature);
 
-                var name = args[1].AsString();
+                var name = args[0].AsString();
                 if (string.IsNullOrWhiteSpace(name))
                     ThrowInvalidCounterName(signature);
 
                 double value = 1;
-                if (args.Length == 3)
+                if (args.Length == 2)
                 {
-                    if (args[2].IsNumber() == false)
+                    if (args[1].IsNumber() == false)
                         ThrowInvalidCounterValue();
-                    value = args[2].AsNumber();
+                    value = args[1].AsNumber();
                 }
 
                 long? currentValue = null;
@@ -1229,7 +1230,7 @@ namespace Raven.Server.Documents.Patch
                     currentValue = _database.DocumentsStorage.CountersStorage.GetCounterValue(_docsCtx, id, name)?.Value;
                 }
 
-                _database.DocumentsStorage.CountersStorage.IncrementCounter(_docsCtx, id, CollectionName.GetCollectionName(docBlittable), name, (long)value, out var exists);
+                _database.DocumentsStorage.CountersStorage.IncrementCounter(_docsCtx, id, collection, name, (long)value, out var exists);
 
                 if (exists == false)
                 {
@@ -1254,49 +1255,22 @@ namespace Raven.Server.Documents.Patch
                 return JsBoolean.True;
             }
 
-            private JsValue DeleteCounter(JsValue self, JsValue[] args)
+            private JsValue DeleteCounter(string id, string collection, JsValue[] args)
             {
                 AssertValidDatabaseContext("deleteCounter");
 
-                if (args.Length != 2)
+                if (args.Length != 1)
                 {
                     ThrowInvalidDeleteCounterArgs();
                 }
 
-                string id = null;
-                BlittableJsonReaderObject docBlittable = null;
-
-                if (args[0].IsObject() && args[0].AsObject() is BlittableObjectInstance doc)
-                {
-                    id = doc.DocumentId;
-                    docBlittable = doc.Blittable;
-                }
-                else if (args[0].IsString())
-                {
-                    id = args[0].AsString();
-                    var document = _database.DocumentsStorage.Get(_docsCtx, id);
-                    if (document == null)
-                    {
-                        ThrowMissingDocument(id);
-                        Debug.Assert(false); // never hit
-                    }
-
-                    docBlittable = document.Data;
-                }
-                else
-                {
-                    ThrowInvalidDeleteCounterDocumentArg();
-                }
-
-                Debug.Assert(id != null && docBlittable != null);
-
-                if (args[1].IsString() == false)
+                if (args[0].IsString() == false)
                 {
                     ThrowDeleteCounterNameArg();
                 }
 
-                var name = args[1].AsString();
-                _database.DocumentsStorage.CountersStorage.DeleteCounter(_docsCtx, id, CollectionName.GetCollectionName(docBlittable), name);
+                var name = args[0].AsString();
+                _database.DocumentsStorage.CountersStorage.DeleteCounter(_docsCtx, id, collection, name);
 
                 DocumentCountersToUpdate ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 DocumentCountersToUpdate.Add(id);
