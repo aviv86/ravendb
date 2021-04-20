@@ -155,14 +155,14 @@ namespace SlowTests.Server.Documents.PeriodicBackup.Restore
                     var databaseName = $"restored_database-{Guid.NewGuid()}";
 
                     settings.RemoteFolderName = oneTimeBackup ? backupResult.LocalBackup.BackupDirectory : status.FolderName;
-                    var restoreFromGoogleCloudConfiguration = new RestoreFromAzureConfiguration()
+                    var restoreFromAzureConfiguration = new RestoreFromAzureConfiguration()
                     {
                         DatabaseName = databaseName,
                         Settings = settings,
                         DisableOngoingTasks = true
                     };
-                    var googleCloudOperation = new RestoreBackupOperation(restoreFromGoogleCloudConfiguration);
-                    var restoreOperation = store.Maintenance.Server.Send(googleCloudOperation);
+                    var azureOperation = new RestoreBackupOperation(restoreFromAzureConfiguration);
+                    var restoreOperation = store.Maintenance.Server.Send(azureOperation);
 
                     restoreOperation.WaitForCompletion(TimeSpan.FromSeconds(30));
                     using (var store2 = GetDocumentStore(new Options() { CreateDatabase = false, ModifyDatabaseName = s => databaseName }))
