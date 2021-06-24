@@ -64,6 +64,48 @@ namespace FastTests.Sharding
             }
         }
 
+        [Fact]
+        public void CanStoreWithoutId()
+        {
+            using (var store = GetShardedDocumentStore())
+            {
+                string id;
+                using (var session = store.OpenSession())
+                {
+                    var user = new User { Name = "Aviv" };
+                    session.Store(user);
+
+                    id = user.Id;
+                    Assert.NotNull(id);
+
+                    session.SaveChanges();
+
+
+                }
+
+                //WaitForUserToContinueTheTest(store);
+
+                using (var session = store.OpenSession())
+                {
+                    for (int i = 0; i < 33; i++)
+                    {
+                        session.Store(new User());
+                    }
+
+                    session.SaveChanges();
+                }
+
+
+                using (var session = store.OpenSession())
+                {
+                    var loaded = session.Load<User>(id);
+
+                    Assert.NotNull(loaded);
+                    Assert.Equal("Aviv", loaded.Name);
+                }
+            }
+        }
+
         private static IEnumerable<object[]>  GetMetadataStaticFields()
         {
             return typeof(Constants.Documents.Metadata)
