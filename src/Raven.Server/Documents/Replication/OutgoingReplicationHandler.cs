@@ -727,6 +727,8 @@ namespace Raven.Server.Documents.Replication
                     CompressionSupport = _parent._server.LicenseManager.LicenseStatus.HasTcpDataCompression
                 };
 
+                _interruptibleRead = new InterruptibleRead(_database.DocumentsStorage.ContextPool, stream);
+
                 //This will either throw or return acceptable protocol version.
                 SupportedFeatures = TcpNegotiation.Sync.NegotiateProtocolVersion(documentsContext, stream, parameters);
 
@@ -736,9 +738,6 @@ namespace Raven.Server.Documents.Replication
 
         private TcpConnectionHeaderMessage.NegotiationResponse ReadHeaderResponseAndThrowIfUnAuthorized(JsonOperationContext context, BlittableJsonTextWriter writer, Stream stream, string url)
         {
-            _interruptibleRead?.Dispose();
-            _interruptibleRead = new InterruptibleRead(_database.DocumentsStorage.ContextPool, stream);
-
             const int timeout = 2 * 60 * 1000;
 
             using (var replicationTcpConnectReplyMessage = _interruptibleRead.ParseToMemory(
