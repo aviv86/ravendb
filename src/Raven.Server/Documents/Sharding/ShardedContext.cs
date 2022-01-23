@@ -51,7 +51,7 @@ namespace Raven.Server.Documents.Sharding
         /// per TB of overall db size. That means that even for *very* large databases, the
         /// size of the shard is still going to be manageable.
         /// </summary>
-        public int GetShardId(TransactionOperationContext context, string key)
+        public static int GetShardId(TransactionOperationContext context, string key)
         {
             using (DocumentIdWorker.GetLowerIdSliceAndStorageKey(context, key, out var lowerId, out _))
             {

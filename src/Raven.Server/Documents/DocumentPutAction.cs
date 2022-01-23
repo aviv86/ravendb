@@ -15,7 +15,7 @@ using System.Linq;
 using Raven.Client.Exceptions;
 using Raven.Client.Exceptions.Documents;
 using Raven.Client.ServerWide;
-using Raven.Server.Documents.Replication;
+using Raven.Server.Documents.Sharding;
 using Sparrow.Server;
 using static Raven.Server.Documents.DocumentsStorage;
 using Constants = Raven.Client.Constants;
@@ -241,11 +241,13 @@ namespace Raven.Server.Documents
                 }
 
                 FlagsProperlySet(flags, changeVector);
+                var bucket = GetBucket(id);
 
                 using (Slice.From(context.Allocator, changeVector, out var cv))
                 using (table.Allocate(out TableValueBuilder tvb))
                 {
                     tvb.Add(lowerId);
+                    tvb.Add(bucket);
                     tvb.Add(Bits.SwapBytes(newEtag));
                     tvb.Add(idPtr);
                     tvb.Add(document.BasePointer, document.Size);
@@ -272,6 +274,8 @@ namespace Raven.Server.Documents
                 _documentDatabase.Metrics.Docs.PutsPerSec.MarkSingleThreaded(1);
                 _documentDatabase.Metrics.Docs.BytesPutsPerSec.MarkSingleThreaded(document.Size);
 
+                UpdateGlobalBucketStats(context, bucket, document.Size, modifiedTicks);
+
                 context.Transaction.AddAfterCommitNotification(new DocumentChange
                 {
                     ChangeVector = changeVector,
@@ -292,6 +296,46 @@ namespace Raven.Server.Documents
                     Flags = flags,
                     LastModified = new DateTime(modifiedTicks, DateTimeKind.Utc)
                 };
+            }
+        }
+
+        private static void UpdateGlobalBucketStats(DocumentsOperationContext context, int bucket, int documentSize, long modifiedTicks)
+        {
+            var table = context.Transaction.InnerTransaction.OpenTable(BucketStatsSchema, GlobalBucketsTreeSlice);
+
+            TableValueReader existing;
+            using (context.Allocator.Allocate(sizeof(long), out ByteString buffer))
+            using (Slice.External(context.Allocator, buffer, buffer.Length, out var keySlice))
+            {
+                *(int*)buffer.Ptr = bucket;
+                table.ReadByKey(keySlice, out existing);
+            }
+
+            using (table.Allocate(out TableValueBuilder tvb))
+            {
+                tvb.Add(bucket);
+                tvb.Add(documentSize);
+                tvb.Add(modifiedTicks);
+
+                if (existing.Pointer == null)
+                {
+                    table.Insert(tvb);
+                }
+                else
+                {
+                    table.Update(existing.Id, tvb);
+                }
+            }
+        }
+
+        private int GetBucket(string id)
+        {
+            if (ShardHelper.IsShardedName(_documentDatabase.Name) == false) // ?
+                return -1;
+
+            using (_documentDatabase.ServerStore.ContextPool.AllocateOperationContext(out TransactionOperationContext txContext))
+            {
+                return ShardedContext.GetShardId(txContext, id);
             }
         }
 
