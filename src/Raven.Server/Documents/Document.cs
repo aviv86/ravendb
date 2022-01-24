@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using Raven.Client;
-using Raven.Server.ServerWide.Context;
 using Sparrow;
 using Sparrow.Json;
 using Sparrow.Json.Parsing;
@@ -13,6 +12,7 @@ namespace Raven.Server.Documents
         public IEnumerable<DynamicJsonValue> TimeSeries;
         public string Key;
     }
+
     public class Document : IDisposable
     {
         public static readonly Document ExplicitNull = new Document();
