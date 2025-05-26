@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -12,6 +13,7 @@ using Raven.Client.Documents.Operations.ConnectionStrings;
 using Raven.Client.Http;
 using Raven.Client.Json;
 using Raven.Server.Documents;
+using Raven.Server.Documents.AI;
 using Raven.Server.Documents.ETL.Providers.AI.GenAi;
 using Raven.Server.Documents.ETL.Providers.AI.GenAi.Test;
 using Raven.Server.ServerWide.Context;
@@ -1595,51 +1597,50 @@ for (const comment of this.Comments)
             await session.SaveChangesAsync();
         }
 
-        var database = await GetDocumentDatabaseInstanceFor(store);
-
-        using (database.DocumentsStorage.ContextPool.AllocateOperationContext(out DocumentsOperationContext context))
+        var config = new GenAiConfiguration
         {
-            var testGenAiScript = new TestGenAiScript
+            Name = "Check blog comments spam",
+            Connection = new AiConnectionString
             {
-                DocumentId = id,
-                Configuration = new()
+                Name = "ollama-local",
+                Identifier = "ollama-local",
+                OllamaSettings = new OllamaSettings
                 {
-                    Name = "Check blog comments spam",
-                    Connection = new AiConnectionString
-                    {
-                        Name = "ollama-local",
-                        Identifier = "ollama-local",
-                        OllamaSettings = new OllamaSettings
-                        {
-                            Uri = "http://127.0.0.1:11434/",
-                            Model = "llama3.2:latest"
-                        }
-                    },
-                    Collection = "Posts",
-                    Prompt = "Check if the following blog post comment is spam or not",
-                    SampleObject = JsonConvert.SerializeObject(
-                    new
-                    {
-                        Blocked = true,
-                        Reason = "Concise reason for why this comment was marked as spam or harmful"
-                    }),
-                    Update = @"    
+                    Uri = "http://127.0.0.1:11434/",
+                    Model = "llama3.2:latest"
+                }
+            },
+            Collection = "Posts",
+            Prompt = "Check if the following blog post comment is spam or not",
+            JsonSchema = AbstractChatCompletionClient.GetSchemaFor(JsonConvert.SerializeObject(new
+            {
+                Blocked = true,
+                Reason = "Concise reason for why this comment was marked as spam or harmful"
+            })),
+            Update = @"    
 const idx = this.Comments.findIndex(c => c.Id == $input.Id);  
 this.Comments[idx].Spam = $output.Blocked;
 ",
-                    GenAiTransformation = new GenAiTransformation
-                    {
-                        Script = @"
+            GenAiTransformation = new GenAiTransformation
+            {
+                Script = @"
 for (const comment of this.Comments)
 {
     context({Text: comment.Text, Author: comment.Author, Id: comment.Id});
 }
 "
-                    }
-                },
-                TestStage = TestStage.CreateContextObjects
-            };
+            }
+        };
+        var testGenAiScript = new TestGenAiScript
+        {
+            DocumentId = id,
+            Configuration = config,
+            TestStage = TestStage.CreateContextObjects
+        };
 
+        var database = await GetDocumentDatabaseInstanceFor(store);
+        using (database.DocumentsStorage.ContextPool.AllocateOperationContext(out DocumentsOperationContext context))
+        {
             var firstRun = GenAiTask.TestScript(testGenAiScript, database, database.ServerStore, context) as GenAiTestScriptResult;
 
             Assert.NotNull(firstRun);
@@ -1663,22 +1664,44 @@ for (const comment of this.Comments)
 
             Assert.True(finalRun.OutputDocument.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject metadata));
             Assert.True(metadata.TryGet(GenAiTask.GenAiHashesMetadataKey, out BlittableJsonReaderObject hashesSection));
-            Assert.True(hashesSection.TryGet(testGenAiScript.Configuration.Name, out BlittableJsonReaderArray hashes));
+            Assert.True(hashesSection.TryGet(testGenAiScript.Configuration.Name, out BlittableJsonReaderArray hashesArr));
+
+            var hashes = hashesArr.Select(x => x.ToString()).ToList();
 
             List<string> expectedHashes = new();
+            var prompt = testGenAiScript.Configuration.Prompt;
+            var schema = testGenAiScript.Configuration.JsonSchema;
+            var update = testGenAiScript.Configuration.Update;
 
             foreach (var item in finalRun.Results)
             {
-                var contextObj = item.ContextOutput.Context.ToString();
-                var hash = AttachmentsStorageHelper.CalculateHash(MemoryMarshal.AsBytes(contextObj.AsSpan()));
+                var wrapped = new DynamicJsonValue
+                {
+                    ["Context"] = item.ContextOutput.Context,
+                    ["Prompt"] = prompt,
+                    ["Schema"] = schema,
+                    ["Update"] = update
+                };
 
+                using var wrappedBlittable = context.ReadObject(wrapped, "hash");
+                var hash = AttachmentsStorageHelper.CalculateHash(wrappedBlittable.AsSpan());
                 expectedHashes.Add(hash);
             }
-            
-            Assert.Equal(expectedHashes.Count, hashes.Length);
+
+            Assert.Equal(expectedHashes.Count, hashes.Count);
+
+            var expectedStr = string.Join(',', expectedHashes);
+            output.WriteLine("expected hashes: " + expectedStr);
+
+            var actualStr = string.Join(',', hashes);
+
+            output.WriteLine("actual hashes: " + actualStr);
+
 
             foreach (var hash in expectedHashes)
             {
+                output.WriteLine("checking for " + hash + " in hashes");
+
                 Assert.Contains(hash, hashes);
             }
         }

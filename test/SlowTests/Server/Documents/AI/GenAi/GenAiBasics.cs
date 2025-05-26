@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using FastTests;
@@ -16,6 +15,7 @@ using Raven.Server.Documents.AI;
 using Raven.Server.Documents.ETL;
 using Raven.Server.Documents.ETL.Providers.AI.GenAi;
 using Raven.Server.Documents.ETL.Providers.AI.GenAi.Stats;
+using Raven.Server.Documents.ETL.Stats;
 using Raven.Server.Utils;
 using Sparrow.Json;
 using Sparrow.Json.Parsing;
@@ -510,16 +510,34 @@ for(const comment of this.Comments)
 
             foreach (var comment in post.Comments)
             {
-                var djv = new DynamicJsonValue
+                var contextObj = new DynamicJsonValue
                 {
                     [nameof(Comment.Text)] = comment.Text,
                     [nameof(Comment.Author)] = comment.Author,
                     [nameof(Comment.Id)] = comment.Id
                 };
 
-                using var ctxDoc = context.ReadObject(djv, docId);
-                var json = ctxDoc.ToString();
-                var hash = AttachmentsStorageHelper.CalculateHash(MemoryMarshal.AsBytes(json.AsSpan()));
+                var ctxBlittable = context.ReadObject(contextObj, docId);
+
+                var wrapped = new DynamicJsonValue
+                {
+                    ["Context"] = ctxBlittable,
+                    ["Prompt"] = "Check if the following blog post comment is spam or not",
+                    ["Schema"] = AbstractChatCompletionClient.GetSchemaFor(JsonConvert.SerializeObject(new
+                    {
+                        Blocked = true,
+                        Reason = "Concise reason for why this comment was marked as spam or ham"
+                    })),
+                    ["Update"] = @"    
+const idx = this.Comments.findIndex(c => c.Id == $input.Id);  
+if($output.Blocked)
+{
+    this.Comments.splice(idx, 1); // remove
+}"
+                };
+
+                using var fullObj = context.ReadObject(wrapped, docId);
+                var hash = AttachmentsStorageHelper.CalculateHash(fullObj.AsSpan());
 
                 results.Add(hash);
             }
@@ -633,10 +651,17 @@ for(const comment of this.Comments)
 
             Assert.True(etlDone.Wait(TimeSpan.FromMinutes(1)));
 
-            var stats2 = etlProcess.GetPerformanceStats()
-                .Where(x => x.NumberOfLoadedItems > 0 && x.LastLoadedEtag > etag)
-                .ToArray();
+            EtlPerformanceStats[] stats2 = null;
 
+            var value = await WaitForValueAsync(() =>
+            {
+                stats2 = etlProcess.GetPerformanceStats()
+                    .Where(x => x.NumberOfLoadedItems > 0 && x.LastLoadedEtag > etag)
+                    .ToArray();
+                return stats2.Length > 0;
+            }, true, timeout: 60_000);
+
+            Assert.True(value);
             Assert.Equal(1, stats2[^1].NumberOfExtractedItems[EtlItemType.Document]);
 
             var loadDetails2 = stats2[^1].Details.Operations[^1];
