@@ -6,7 +6,7 @@ namespace Raven.Server.Documents.Sharding.Handlers;
 
 public sealed class ShardedGenAiHandler : ShardedDatabaseRequestHandler
 {
-    [RavenShardedAction("/databases/*/admin/ai/genai/test", "POST")]
+    [RavenShardedAction("/databases/*/admin/ai/gen-ai/test", "POST")]
     public async Task PostScriptTest()
     {
         using (var processor = new ShardedGenAiHandlerProcessorForPostScriptTest(this))

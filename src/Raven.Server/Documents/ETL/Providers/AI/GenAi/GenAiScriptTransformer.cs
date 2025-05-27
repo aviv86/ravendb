@@ -18,7 +18,7 @@ using Sparrow.Json.Parsing;
 
 namespace Raven.Server.Documents.ETL.Providers.AI.GenAi;
 
-internal sealed class GenAiScriptTransformer : EtlTransformer<AiEtlItem, GenAiScriptResult, GenAiStatsScope, GenAiPerformanceOperation>
+internal sealed class GenAiScriptTransformer : EtlTransformer<GenAiItem, GenAiScriptResult, GenAiStatsScope, GenAiPerformanceOperation>
 {
     private readonly GenAiConfiguration _configuration;
     private List<GenAiScriptResult> _currentRun;
@@ -27,12 +27,12 @@ internal sealed class GenAiScriptTransformer : EtlTransformer<AiEtlItem, GenAiSc
     public GenAiScriptTransformer(DocumentDatabase database, DocumentsOperationContext context, Transformation transformation, PatchRequest behaviorFunctions, GenAiConfiguration configuration) : base(database, context, null, behaviorFunctions)
     {
         _configuration = configuration;
-        _mainScript = new PatchRequest(transformation.Script, PatchRequestType.AiGen);
+        _mainScript = new PatchRequest(transformation.Script, PatchRequestType.GenAi);
     }
 
     public override void Initialize(bool debugMode)
     {
-        Database.Scripts.GetScriptRunner(_mainScript, true, out DocumentScript);
+        ReturnMainRun = Database.Scripts.GetScriptRunner(_mainScript, true, out DocumentScript);
 
         if (DocumentScript == null)
             return;
@@ -46,24 +46,23 @@ internal sealed class GenAiScriptTransformer : EtlTransformer<AiEtlItem, GenAiSc
 
     protected override void AddLoadedAttachment(JsValue reference, string name, Attachment attachment)
     {
-        throw new NotImplementedException();
+        throw new NotSupportedException("Attachment are not supported in GenAI Task");
     }
 
     protected override void AddLoadedCounter(JsValue reference, string name, long value)
     {
-        throw new NotImplementedException();
+        throw new NotSupportedException("Counters are not supported in GenAI Task");
     }
 
     protected override void AddLoadedTimeSeries(JsValue reference, string name, IEnumerable<SingleResult> entries)
     {
-        throw new NotImplementedException();
+        throw new NotSupportedException("TimeSeries are not supported in GenAI Task");
     }
 
     protected override string[] LoadToDestinations { get; }
 
     protected override void LoadToFunction(string tableName, ScriptRunnerResult colsAsObject)
     {
-        throw new NotImplementedException();
     }
 
     public override IEnumerable<GenAiScriptResult> GetTransformedResults()
@@ -71,7 +70,7 @@ internal sealed class GenAiScriptTransformer : EtlTransformer<AiEtlItem, GenAiSc
         return _currentRun ?? Enumerable.Empty<GenAiScriptResult>();
     }
 
-    public override void Transform(AiEtlItem item, GenAiStatsScope stats, EtlProcessState state)
+    public override void Transform(GenAiItem item, GenAiStatsScope stats, EtlProcessState state)
     {
         Current = item;
         _currentRun ??= [];
@@ -105,7 +104,7 @@ internal sealed class GenAiScriptTransformer : EtlTransformer<AiEtlItem, GenAiSc
     private static bool ShouldSendContext(string hash, string taskName, Document doc)
     {
         if (doc.Data.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject metadata) == false ||
-            metadata.TryGet(GenAiTask.GenAiHashesMetadataKey, out BlittableJsonReaderObject hashesSection) == false ||
+            metadata.TryGet(Constants.Documents.Metadata.GenAiHashes, out BlittableJsonReaderObject hashesSection) == false ||
             hashesSection.TryGet(taskName, out BlittableJsonReaderArray existingHashes) == false)
             return true; // hash not found, should send
 
@@ -125,7 +124,7 @@ internal sealed class GenAiScriptTransformer : EtlTransformer<AiEtlItem, GenAiSc
             ["Context"] = contextObj,
             ["Prompt"] = _configuration.Prompt,
             ["Schema"] = _configuration.JsonSchema,
-            ["Update"] = _configuration.Update
+            ["Update"] = _configuration.UpdateScript
         };
 
         using var ctx = Context.ReadObject(djv, "hash");

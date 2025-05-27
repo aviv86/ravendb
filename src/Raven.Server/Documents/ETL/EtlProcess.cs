@@ -560,7 +560,7 @@ namespace Raven.Server.Documents.ETL
                 }
             }
             
-            else if (currentItem is AiEtlItem)
+            else if (currentItem is EmbeddingsGenerationItem)
             {
                 if (stats.NumberOfExtractedItems[EtlItemType.Document] >= Database.Configuration.Ai.EmbeddingsGenerationMaxBatchSize)
                 {
@@ -1482,7 +1482,7 @@ namespace Raven.Server.Documents.ETL
                     {
                         embeddingsGenerationTask.EnsureThreadAllocationStats();
                         
-                        var embeddingsGenerationItem = new AiEtlItem(document, docCollection);
+                        var embeddingsGenerationItem = new EmbeddingsGenerationItem(document, docCollection);
                         var results = embeddingsGenerationTask.Transform([embeddingsGenerationItem], context, new EmbeddingsGenerationStatsScope(new EtlRunStats()), new EtlProcessState());
 
                         var result  = embeddingsGenerationTask.RunTest(results, context);

@@ -39,12 +39,12 @@ internal sealed class GenAiBatchPatchCommand : PatchDocumentCommandBase
               collectResultsNeeded: true,
               returnDocument: false)
     {
-        _items = items;
-        _patchRequest = patchRequest;
-        _taskName = taskName;
+        _items = items ?? throw new ArgumentException(nameof(items));
+        _patchRequest = patchRequest ?? throw new ArgumentException(nameof(patchRequest));
+        _taskName = taskName ?? throw new ArgumentException(nameof(taskName));
+        _logger = logger ?? throw new ArgumentException(nameof(logger));
+        _statistics = statistics ?? throw new ArgumentException(nameof(statistics));
         _database = context.DocumentDatabase;
-        _logger = logger;
-        _statistics = statistics;
     }
 
     protected override long ExecuteCmd(DocumentsOperationContext context)
@@ -68,6 +68,12 @@ internal sealed class GenAiBatchPatchCommand : PatchDocumentCommandBase
 
                 _patch = (_patchRequest, CreatePatchArgs(context, item));
                 PatchResult patchResult = null;
+
+                //            _database = context.DocumentDatabase;
+                // _returnRun = _database.Scripts.GetScriptRunner(_patch.Run, readOnly: false, out _run);
+                // _disposableStatement = _ignoreMaxStepsForScript ? _run.ScriptEngine.DisableMaxStatements() : null;
+                // _disposableScriptRunner = _patchIfMissing.Run != null ? _database.Scripts.GetScriptRunner(_patchIfMissing.Run, readOnly: false, out _runIfMissing) : null;
+                // _isInitialized = true;
 
                 try
                 {
@@ -110,7 +116,7 @@ internal sealed class GenAiBatchPatchCommand : PatchDocumentCommandBase
             }
             catch (Exception e)
             {
-                var msg = $"Failed to update context hash metadata ('{GenAiTask.GenAiHashesMetadataKey}') for document '{id}'. " +
+                var msg = $"Failed to update context hash metadata ('{Constants.Documents.Metadata.GenAiHashes}') for document '{id}'. " +
                           $"Error: {e}";
                 _statistics.RecordPartialLoadError(msg, id);
                 _logger.Log(LogLevel.Warn, msg);
@@ -141,7 +147,7 @@ internal sealed class GenAiBatchPatchCommand : PatchDocumentCommandBase
             {
                 [Constants.Documents.Metadata.Key] = new DynamicJsonValue
                 {
-                    [GenAiTask.GenAiHashesMetadataKey] = new DynamicJsonValue
+                    [Constants.Documents.Metadata.GenAiHashes] = new DynamicJsonValue
                     {
                         [taskName] = allHashes
                     }
@@ -149,13 +155,13 @@ internal sealed class GenAiBatchPatchCommand : PatchDocumentCommandBase
             };
         }
 
-        else if (metadata.TryGet(GenAiTask.GenAiHashesMetadataKey, out BlittableJsonReaderObject hashes) == false)
+        else if (metadata.TryGet(Constants.Documents.Metadata.GenAiHashes, out BlittableJsonReaderObject hashes) == false)
         {
             // no hashes section
 
             metadata.Modifications = new DynamicJsonValue(metadata)
             {
-                [GenAiTask.GenAiHashesMetadataKey] = new DynamicJsonValue
+                [Constants.Documents.Metadata.GenAiHashes] = new DynamicJsonValue
                 {
                     [taskName] = allHashes
                 }
@@ -177,7 +183,7 @@ internal sealed class GenAiBatchPatchCommand : PatchDocumentCommandBase
 
             metadata.Modifications = new DynamicJsonValue(metadata)
             {
-                [GenAiTask.GenAiHashesMetadataKey] = hashes
+                [Constants.Documents.Metadata.GenAiHashes] = hashes
             };
 
             doc.Modifications = new DynamicJsonValue(doc)

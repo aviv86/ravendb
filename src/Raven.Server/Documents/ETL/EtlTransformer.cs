@@ -31,7 +31,7 @@ namespace Raven.Server.Documents.ETL
 
         protected TExtracted Current;
 
-        private ScriptRunner.ReturnRun _returnMainRun;
+        protected ScriptRunner.ReturnRun ReturnMainRun;
         private ScriptRunner.ReturnRun _behaviorFunctionsRun;
 
         protected EtlTransformer(DocumentDatabase database, DocumentsOperationContext context,
@@ -53,7 +53,7 @@ namespace Raven.Server.Documents.ETL
                     BehaviorsScript.DebugMode = true;
             }
             
-            _returnMainRun = Database.Scripts.GetScriptRunner(_mainScript, true, out DocumentScript);
+            ReturnMainRun = Database.Scripts.GetScriptRunner(_mainScript, true, out DocumentScript);
             if (DocumentScript == null)
                 return;
 
@@ -412,7 +412,7 @@ namespace Raven.Server.Documents.ETL
 
         public void Dispose()
         {
-            using (_returnMainRun)
+            using (ReturnMainRun)
             using (_behaviorFunctionsRun)
             {
 

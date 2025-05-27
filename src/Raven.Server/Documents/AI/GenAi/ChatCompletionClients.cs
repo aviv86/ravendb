@@ -3,8 +3,7 @@ using Raven.Client.Documents.Conventions;
 using Raven.Client.Documents.Operations.AI;
 using Raven.Server.ServerWide.Context;
 
-
-namespace Raven.Server.Documents.AI.AiGen
+namespace Raven.Server.Documents.AI.GenAi
 {
     internal class OpenAiChatCompletionClient : AbstractChatCompletionClient
     {

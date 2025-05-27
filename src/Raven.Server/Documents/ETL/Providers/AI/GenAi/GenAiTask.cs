@@ -7,9 +7,8 @@ using Raven.Client.Documents.Operations.Counters;
 using Raven.Client.Documents.Operations.ETL;
 using Raven.Client.Extensions;
 using Raven.Server.Documents.AI;
-using Raven.Server.Documents.AI.AiGen;
+using Raven.Server.Documents.AI.GenAi;
 using Raven.Server.Documents.ETL.Metrics;
-using Raven.Server.Documents.ETL.Providers.AI.Embeddings;
 using Raven.Server.Documents.ETL.Providers.AI.Enumerators;
 using Raven.Server.Documents.ETL.Providers.AI.GenAi.Stats;
 using Raven.Server.Documents.ETL.Providers.AI.GenAi.Test;
@@ -24,6 +23,7 @@ using Raven.Server.Utils;
 using Sparrow.Json;
 using Sparrow.Json.Parsing;
 using Sparrow.Logging;
+using Sparrow.Server.Json.Sync;
 using Sparrow.Server.Utils;
 using Encoding = System.Text.Encoding;
 using PatchRequest = Raven.Server.Documents.Patch.PatchRequest;
@@ -32,12 +32,10 @@ using PatchRequest = Raven.Server.Documents.Patch.PatchRequest;
 
 namespace Raven.Server.Documents.ETL.Providers.AI.GenAi;
 
-public sealed class GenAiTask : EtlProcess<AiEtlItem, GenAiScriptResult, GenAiConfiguration, AiConnectionString,
+public sealed class GenAiTask : EtlProcess<GenAiItem, GenAiScriptResult, GenAiConfiguration, AiConnectionString,
     GenAiStatsScope, GenAiPerformanceOperation>
 {
     public const string GenAiTaskTag = "Gen/AI";
-
-    internal const string GenAiHashesMetadataKey = "@genAiHashes";
 
     private const string TestDocumentId = "GenAi/TestDocument";
     private int _fallbackCounter = 0;
@@ -74,49 +72,51 @@ public sealed class GenAiTask : EtlProcess<AiEtlItem, GenAiScriptResult, GenAiCo
 
     protected override bool ShouldTrackAttachmentTombstones() => false;
 
-    protected override IEnumerator<AiEtlItem> ConvertDocsEnumerator(DocumentsOperationContext context, IEnumerator<Document> docs, string collection)
+    public override bool ShouldTrackDocumentTombstones() => false;
+
+    protected override IEnumerator<GenAiItem> ConvertDocsEnumerator(DocumentsOperationContext context, IEnumerator<Document> docs, string collection)
     {
-        return new DocumentsToEmbeddingsGenerationItems(docs, collection);
+        return new DocumentsToGenAiItems(docs, collection);
     }
 
-    protected override IEnumerator<AiEtlItem> ConvertTombstonesEnumerator(DocumentsOperationContext context, IEnumerator<Tombstone> tombstones, string collection,
+    protected override IEnumerator<GenAiItem> ConvertTombstonesEnumerator(DocumentsOperationContext context, IEnumerator<Tombstone> tombstones, string collection,
         bool trackAttachments)
     {
-        return new TombstonesToEmbeddingsGenerationItems(tombstones, collection);
+        throw new NotSupportedException($"{nameof(ConvertTombstonesEnumerator)} is not supported for {nameof(GenAiTask)}");
     }
 
-    protected override IEnumerator<AiEtlItem> ConvertAttachmentTombstonesEnumerator(DocumentsOperationContext context, IEnumerator<Tombstone> tombstones,
+    protected override IEnumerator<GenAiItem> ConvertAttachmentTombstonesEnumerator(DocumentsOperationContext context, IEnumerator<Tombstone> tombstones,
         List<string> collections)
     {
-        throw new NotSupportedException($"{nameof(ConvertAttachmentTombstonesEnumerator)} is not supported for {nameof(EmbeddingsGenerationTask)}");
+        throw new NotSupportedException($"{nameof(ConvertAttachmentTombstonesEnumerator)} is not supported for {nameof(GenAiTask)}");
     }
 
-    protected override IEnumerator<AiEtlItem> ConvertCountersEnumerator(DocumentsOperationContext context, IEnumerator<CounterGroupDetail> counters,
+    protected override IEnumerator<GenAiItem> ConvertCountersEnumerator(DocumentsOperationContext context, IEnumerator<CounterGroupDetail> counters,
         string collection)
     {
-        throw new NotSupportedException($"{nameof(ConvertCountersEnumerator)} is not supported for {nameof(EmbeddingsGenerationTask)}");
+        throw new NotSupportedException($"{nameof(ConvertCountersEnumerator)} is not supported for {nameof(GenAiTask)}");
     }
 
-    protected override IEnumerator<AiEtlItem> ConvertTimeSeriesEnumerator(DocumentsOperationContext context, IEnumerator<TimeSeriesSegmentEntry> timeSeries,
+    protected override IEnumerator<GenAiItem> ConvertTimeSeriesEnumerator(DocumentsOperationContext context, IEnumerator<TimeSeriesSegmentEntry> timeSeries,
         string collection)
     {
-        throw new NotSupportedException($"{nameof(ConvertTimeSeriesEnumerator)} is not supported for {nameof(EmbeddingsGenerationTask)}");
+        throw new NotSupportedException($"{nameof(ConvertTimeSeriesEnumerator)} is not supported for {nameof(GenAiTask)}");
     }
 
-    protected override IEnumerator<AiEtlItem> ConvertTimeSeriesDeletedRangeEnumerator(DocumentsOperationContext context,
+    protected override IEnumerator<GenAiItem> ConvertTimeSeriesDeletedRangeEnumerator(DocumentsOperationContext context,
         IEnumerator<TimeSeriesDeletedRangeItem> timeSeries, string collection)
     {
-        throw new NotSupportedException($"{nameof(ConvertTimeSeriesDeletedRangeEnumerator)} is not supported for {nameof(EmbeddingsGenerationTask)}");
+        throw new NotSupportedException($"{nameof(ConvertTimeSeriesDeletedRangeEnumerator)} is not supported for {nameof(GenAiTask)}");
     }
 
-    protected override EtlTransformer<AiEtlItem, GenAiScriptResult, GenAiStatsScope, GenAiPerformanceOperation>
+    protected override EtlTransformer<GenAiItem, GenAiScriptResult, GenAiStatsScope, GenAiPerformanceOperation>
         GetTransformer(DocumentsOperationContext context)
     {
         return new GenAiScriptTransformer(Database, context, Transformation, null, Configuration);
     }
 
     protected override string LoadFailureMessage =>
-        $"Generative AI task '{Configuration.Name}' failed during model communication or update phase. Retrying in {FallbackTime}";
+        $"Gen AI task '{Configuration.Name}' failed during model communication or update phase. Retrying in {FallbackTime}";
 
     protected override void EnterFallbackMode(Exception e, DateTime? lastErrorTime)
     {
@@ -237,13 +237,13 @@ public sealed class GenAiTask : EtlProcess<AiEtlItem, GenAiScriptResult, GenAiCo
             var stream = new ReadOnlyMemoryStream<byte>(Encoding.UTF8.GetBytes(result));
             item.ModelOutput = new ModelOutput
             {
-                Output = context.ReadForMemoryAsync(stream, item.DocId).GetAwaiter().GetResult()
+                Output = context.Sync.ReadForMemory(stream, item.DocId)
             };
 
             stream.Dispose();
 
             stream = new ReadOnlyMemoryStream<byte>(Encoding.UTF8.GetBytes(usage));
-            var usageBlittable = context.ReadForMemoryAsync(stream, item.DocId).GetAwaiter().GetResult();
+            var usageBlittable = context.Sync.ReadForMemory(stream, item.DocId);
             usageBlittable.TryGet("total_tokens", out int tokensUsed);
             usageBlittable.TryGet("prompt_tokens", out int promptTokens);
             usageBlittable.TryGet("completion_tokens", out int completionTokens);
@@ -265,10 +265,10 @@ public sealed class GenAiTask : EtlProcess<AiEtlItem, GenAiScriptResult, GenAiCo
 
     private void ApplyUpdateScript(DocumentsOperationContext context, List<GenAiResultItem> results)
     {
-        PatchRequest req = new(Configuration.Update, PatchRequestType.AiGen);
+        PatchRequest req = new(Configuration.UpdateScript, PatchRequestType.GenAi);
         var cmd = new GenAiBatchPatchCommand(context, results, req, Configuration.Name, Logger, Statistics);
 
-        Database.TxMerger.Enqueue(cmd).GetAwaiter().GetResult();
+        Database.TxMerger.EnqueueSync(cmd);
     }
 
     protected override GenAiStatsScope CreateScope(EtlRunStats stats)
@@ -276,7 +276,7 @@ public sealed class GenAiTask : EtlProcess<AiEtlItem, GenAiScriptResult, GenAiCo
         return new GenAiStatsScope(stats);
     }
 
-    protected override string StatsAggregatorTag => "Generative AI";
+    protected override string StatsAggregatorTag => "Gen AI";
 
     protected override bool ShouldFilterOutHiLoDocument()
     {
@@ -317,8 +317,8 @@ public sealed class GenAiTask : EtlProcess<AiEtlItem, GenAiScriptResult, GenAiCo
                 if (context.HasTransaction == false)
                     context.OpenReadTransaction();
 
-                var aiEtlItem = new AiEtlItem(document, Configuration.Collection);
-                var transformedResults = Transform([aiEtlItem], context, scope, new EtlProcessState());
+                var genAiItem = new GenAiItem(document, Configuration.Collection);
+                var transformedResults = Transform([genAiItem], context, scope, new EtlProcessState());
                 items = PrepareItemsBeforeSendingToModel(transformedResults);
 
                 context.CloseTransaction();
@@ -337,7 +337,7 @@ public sealed class GenAiTask : EtlProcess<AiEtlItem, GenAiScriptResult, GenAiCo
                     using var _ = context.OpenWriteTransaction();
 
                     items = testGenAiScript.Input;
-                    PatchRequest req = new(Configuration.Update, PatchRequestType.AiGen);
+                    PatchRequest req = new(Configuration.UpdateScript, PatchRequestType.GenAi);
                     PatchDocumentCommand lastPatch = null;
                     var hashes = new DynamicJsonArray();
 

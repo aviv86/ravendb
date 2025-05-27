@@ -2222,11 +2222,6 @@ namespace Raven.Server.ServerWide
                     case EtlType.GenAi:
                     {
                         var aiIntegration = JsonDeserializationCluster.GenAiConfiguration(etlConfiguration);
-                        if (string.IsNullOrEmpty(aiIntegration.JsonSchema))
-                        {
-                            // todo: move this to a better location
-                            aiIntegration.JsonSchema = AbstractChatCompletionClient.GetSchemaFor(aiIntegration.SampleObject);
-                        }
                         aiIntegration.Validate(out var aiIntegrationErr, validateName: false, validateConnection: false);
                         if (ValidateConnectionString(rawRecord, aiIntegration.ConnectionStringName, aiIntegration.EtlType) == false)
                             aiIntegrationErr.Add(
@@ -2293,12 +2288,17 @@ namespace Raven.Server.ServerWide
             return await SendToLeaderAsync(command);
         }
 
-        [DoesNotReturn]
         private void ThrowInvalidConfigurationIfNecessary(BlittableJsonReaderObject etlConfiguration, IReadOnlyCollection<string> errors)
         {
             if (errors.Count <= 0)
                 return;
 
+            ThrowInvalidConfiguration(etlConfiguration, errors);
+        }
+
+        [DoesNotReturn]
+        private void ThrowInvalidConfiguration(BlittableJsonReaderObject etlConfiguration, IReadOnlyCollection<string> errors)
+        {
             var sb = new StringBuilder();
             sb
                 .AppendLine("Invalid ETL configuration.")

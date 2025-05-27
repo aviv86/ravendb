@@ -300,6 +300,9 @@ namespace Raven.Client
                 
                 public const string Quantization = "@quantization";
 
+                internal const string GenAiHashes = "@gen-ai-hashes";
+
+
                 internal sealed class Sharding
                 {
                     internal const string ShardNumber = "@shard-number";

@@ -56,7 +56,7 @@ public class GenAiErrorHandling(ITestOutputHelper output) : RavenTestBase(output
                     Blocked = true,
                     Reason = "Concise reason for why this comment was marked as spam or ham"
                 }),
-                Update = @"    
+                UpdateScript = @"    
 const idx = this.Comments.findIndex(c => c.Id == $input.Id);
 this.Comments[idx].IsSpam = $output.Blocked;
 ",
@@ -131,7 +131,7 @@ if($output.Blocked)
                     Blocked = true,
                     Reason = "Concise reason for why this comment was marked as spam or ham"
                 }),
-                Update = badScript,
+                UpdateScript = badScript,
                 GenAiTransformation = new GenAiTransformation
                 {
                     Script = @"for (const comment of this.Comments)
@@ -210,7 +210,7 @@ if($output.Blocked)
                     Blocked = true,
                     Reason = "Concise reason for why this comment was marked as spam or ham"
                 }),
-                Update = badScript,
+                UpdateScript = badScript,
                 GenAiTransformation = new GenAiTransformation
                 {
                     Script = @"for (const comment of this.Comments)
@@ -255,7 +255,7 @@ if($output.Blocked)
             {
                 var doc = session.Load<BlittableJsonReaderObject>(docId);
                 Assert.True(doc.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject metadata));
-                Assert.True(metadata.TryGet(GenAiTask.GenAiHashesMetadataKey, out BlittableJsonReaderObject hashes));
+                Assert.True(metadata.TryGet(Constants.Documents.Metadata.GenAiHashes, out BlittableJsonReaderObject hashes));
 
                 Assert.Equal(1, hashes.Count); // only one context update script was successful 
             }
@@ -291,7 +291,7 @@ if($output.Blocked)
                     Blocked = true,
                     Reason = "Concise reason for why this comment was marked as spam or ham"
                 }),
-                Update = @"const idx = this.Comments.findIndex(c => c.Id == $input.Id);  
+                UpdateScript = @"const idx = this.Comments.findIndex(c => c.Id == $input.Id);  
 this.Comments[idx].IsBlocked = $output.Blocked;",
                 GenAiTransformation = new GenAiTransformation
                 {
@@ -350,7 +350,7 @@ this.Comments[idx].IsBlocked = $output.Blocked;",
             {
                 var doc = session.Load<BlittableJsonReaderObject>(docId);
                 Assert.True(doc.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject metadata));
-                Assert.True(metadata.TryGet(GenAiTask.GenAiHashesMetadataKey, out BlittableJsonReaderObject hashesSection));
+                Assert.True(metadata.TryGet(Constants.Documents.Metadata.GenAiHashes, out BlittableJsonReaderObject hashesSection));
                 Assert.True(hashesSection.TryGet(config.Name, out BlittableJsonReaderArray hashes));
 
                 Assert.Equal(3, hashes.Length); // all 3 context hashes should be in metadata (refusal is considered a success) 
@@ -390,7 +390,7 @@ this.Comments[idx].IsBlocked = $output.Blocked;",
             Prompt = "Translate this text to sanskrit",
             Collection = "Posts",
             SampleObject = JsonConvert.SerializeObject(new { Result = "text" }),
-            Update = "this.Result = $output.Result;",
+            UpdateScript = "this.Result = $output.Result;",
             GenAiTransformation = new GenAiTransformation
             {
                 Script = "for (const comment of this.Comments) context({Text: comment.Text, Id: comment.Id});"
@@ -446,7 +446,7 @@ this.Comments[idx].IsBlocked = $output.Blocked;",
         {
             var doc = session.Load<BlittableJsonReaderObject>(docId);
             Assert.True(doc.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject metadata));
-            Assert.True(metadata.TryGet(GenAiTask.GenAiHashesMetadataKey, out BlittableJsonReaderObject hashes));
+            Assert.True(metadata.TryGet(Constants.Documents.Metadata.GenAiHashes, out BlittableJsonReaderObject hashes));
             Assert.True(hashes.TryGet(config.Name, out BlittableJsonReaderArray arr));
 
             Assert.Equal(1, arr.Length); // only some processed
@@ -488,7 +488,7 @@ this.Comments[idx].IsBlocked = $output.Blocked;",
         {
             var doc2 = session.Load<BlittableJsonReaderObject>(docId2);
             Assert.True(doc2.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject metadata));
-            Assert.False(metadata.TryGet(GenAiTask.GenAiHashesMetadataKey, out BlittableJsonReaderObject _));
+            Assert.False(metadata.TryGet(Constants.Documents.Metadata.GenAiHashes, out BlittableJsonReaderObject _));
         }
     }
 
@@ -521,7 +521,7 @@ this.Comments[idx].IsBlocked = $output.Blocked;",
                 Blocked = true,
                 Reason = "Concise reason for why this comment was marked as spam or ham"
             }),
-            Update = @"const idx = this.Comments.findIndex(c => c.Id == $input.Id); 
+            UpdateScript = @"const idx = this.Comments.findIndex(c => c.Id == $input.Id); 
 this.Comments[idx].IsSpam = $output.Blocked;",
             GenAiTransformation = new GenAiTransformation
             {
@@ -577,7 +577,7 @@ this.Comments[idx].IsSpam = $output.Blocked;",
         {
             var doc = session.Load<BlittableJsonReaderObject>(docId);
             Assert.True(doc.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject metadata));
-            Assert.True(metadata.TryGet(GenAiTask.GenAiHashesMetadataKey, out BlittableJsonReaderObject hashesSection));
+            Assert.True(metadata.TryGet(Constants.Documents.Metadata.GenAiHashes, out BlittableJsonReaderObject hashesSection));
             Assert.True(hashesSection.TryGet(taskName, out BlittableJsonReaderArray hashes));
 
             // Only one comment should have succeeded
@@ -612,7 +612,7 @@ this.Comments[idx].IsSpam = $output.Blocked;",
         {
             var doc = session.Load<BlittableJsonReaderObject>(docId);
             Assert.True(doc.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject metadata));
-            Assert.True(metadata.TryGet(GenAiTask.GenAiHashesMetadataKey, out BlittableJsonReaderObject hashesSection));
+            Assert.True(metadata.TryGet(Constants.Documents.Metadata.GenAiHashes, out BlittableJsonReaderObject hashesSection));
             Assert.True(hashesSection.TryGet(taskName, out BlittableJsonReaderArray hashes));
 
             // now both contexts should have their hash in metadata

@@ -11,7 +11,7 @@ public class GenAiTransformation
         error = string.Empty;
         if (Script.Contains("context")) 
             return true;
-        error = "You must call the context(ctx, hash) function in your script";
+        error = "You must call the context(ctx) function in your script";
         return false;
 
     }

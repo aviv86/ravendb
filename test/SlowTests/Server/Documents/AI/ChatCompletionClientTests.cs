@@ -5,10 +5,11 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using FastTests;
 using Newtonsoft.Json;
 using Raven.Client.Documents.Operations.AI;
 using Raven.Server.Documents.AI;
-using Raven.Server.Documents.AI.AiGen;
+using Raven.Server.Documents.AI.GenAi;
 using Raven.Server.Logging;
 using Raven.Server.ServerWide.Context;
 using Sparrow.Logging;
@@ -17,7 +18,7 @@ using Voron;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace FastTests.GenAi;
+namespace SlowTests.Server.Documents.AI;
 
 public class ChatCompletionClientTests : RavenTestBase
 {

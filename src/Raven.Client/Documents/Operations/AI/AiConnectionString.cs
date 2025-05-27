@@ -95,7 +95,7 @@ public sealed class AiConnectionString : ConnectionString
         return result;
     }
 
-    public bool UsingEncryptedCommunicationChannel()
+    internal bool UsingEncryptedCommunicationChannel()
     {
         AiConnectorType aiConnectorType = GetActiveProvider();
         switch (aiConnectorType)

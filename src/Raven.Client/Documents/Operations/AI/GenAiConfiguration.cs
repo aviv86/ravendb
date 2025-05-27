@@ -32,13 +32,13 @@ public class GenAiConfiguration : EtlConfiguration<AiConnectionString>
     //TODO: Make this JSON objects? 
     public string JsonSchema { get; set; }
     public string SampleObject { get; set; }
-    public string Update { get; set; }
+    public string UpdateScript { get; set; }
     
     private List<Transformation> _transforms;
 
     [JsonDeserializationIgnore]
     [JsonIgnore]
-    [Obsolete($"{nameof(GenAiConfiguration)} doesn't support multiple transformations.")]
+    [Obsolete($"{nameof(GenAiConfiguration)} doesn't support multiple transformations. Please use {nameof(GenAiTransformation)} property instead.")]
 #pragma warning disable CS0809 // Obsolete member overrides non-obsolete member
     public override List<Transformation> Transforms
 #pragma warning restore CS0809 // Obsolete member overrides non-obsolete member
@@ -57,19 +57,19 @@ public class GenAiConfiguration : EtlConfiguration<AiConnectionString>
         }
         set
         {
-            throw new NotSupportedException($"{nameof(EmbeddingsGenerationConfiguration)} doesn't support multiple transformations.  Please use {nameof(GenAiTransformation)} property instead.");
+            throw new NotSupportedException($"{nameof(GenAiConfiguration)} doesn't support multiple transformations. Please use {nameof(GenAiTransformation)} property instead.");
         }
     }
 
     public override bool Validate(out List<string> errors, bool validateName = true, bool validateConnection = true)
     {
         if (validateConnection && Initialized == false)
-            throw new InvalidOperationException("AiGen configuration must be initialized");
+            throw new InvalidOperationException("GenAi configuration must be initialized");
 
         errors = [];
 
         if (validateName && string.IsNullOrEmpty(Name))
-            errors.Add($"{nameof(Name)} of AiGen configuration cannot be empty");
+            errors.Add($"{nameof(Name)} of GenAi configuration cannot be empty");
 
         if (TestMode == false && string.IsNullOrEmpty(ConnectionStringName))
             errors.Add($"{nameof(ConnectionStringName)} cannot be empty");
@@ -86,7 +86,7 @@ public class GenAiConfiguration : EtlConfiguration<AiConnectionString>
         else if (GenAiTransformation.ValidateScript(out var error) == false)
             errors.Add(error);
 
-        if (TestMode == false && string.IsNullOrEmpty(Update))
+        if (TestMode == false && string.IsNullOrEmpty(UpdateScript))
             errors.Add("You must provide an update function");
 
         return errors.Count == 0;
@@ -102,7 +102,7 @@ public class GenAiConfiguration : EtlConfiguration<AiConnectionString>
         json[nameof(Prompt)] = Prompt;
         json[nameof(SampleObject)] = SampleObject;
         json[nameof(JsonSchema)] = JsonSchema;
-        json[nameof(Update)] = Update;
+        json[nameof(UpdateScript)] = UpdateScript;
         json[nameof(GenAiTransformation)] = GenAiTransformation.ToJson();
 
         return json;
