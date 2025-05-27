@@ -27,6 +27,7 @@ class licenseWidget extends widget {
     
     licenseTypeText = license.licenseTypeText;
     formattedExpiration = license.formattedExpiration;
+    licenseTypeClass: KnockoutObservable<string>;
     
     serverCertificateInfo = ko.observable<serverCertificateInfo>();
 
@@ -36,6 +37,13 @@ class licenseWidget extends widget {
         super(controller);
         
         this.spinners.serverCertificate(this.canLoadCertificateInfo());
+
+        this.licenseTypeClass = ko.pureComputed(() => {
+            if (license.getStatusValue("Type") === "EnterpriseAi") {
+                return "license-item-value ai-gradient";
+            }
+            return "license-item-value";
+        });
     }
 
     private canLoadCertificateInfo() {
