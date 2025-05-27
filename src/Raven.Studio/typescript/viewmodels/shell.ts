@@ -135,6 +135,8 @@ class shell extends viewModelBase {
 
     protractedRequestMessageView: ReactInKnockout<typeof ProtractedRequestMessage.default>;
     helpAndResourcesWidgetView: ReactInKnockout<typeof HelpAndResourcesWidget.HelpAndResourcesWidget>;
+    logoSrc: KnockoutObservable<string>;
+    logoClass: KnockoutComputed<string>;
     
     constructor() {
         super();
@@ -284,6 +286,20 @@ class shell extends viewModelBase {
         }));
         
         this.helpAndResourcesWidgetView = ko.pureComputed(() => ({ component: HelpAndResourcesWidget.HelpAndResourcesWidget }));
+
+        this.logoSrc = ko.pureComputed(() => {
+            if (license.getStatusValue("Type") === "EnterpriseAi") {
+                return require("../../wwwroot/Content/img/ravendb-ai_logo.svg");
+            }
+            return require("../../wwwroot/Content/img/ravendb_logo.svg");
+        });
+
+        this.logoClass = ko.pureComputed(() => {
+            if (license.getStatusValue("Type") === "EnterpriseAi") {
+                return "main-logo-ai";
+            }
+            return "main-logo";
+        });
     }
     
     // Override canActivate: we can always load this page, regardless of any system db prompt.

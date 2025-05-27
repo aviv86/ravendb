@@ -40,9 +40,8 @@ a:not(.btn):not(.dropdown-item):not(.no-decor) {
     max-width: 50em;
 }
 
-.text-ai {
-    // TODO test it
-    background: linear-gradient(140deg, #2fb4d2 0%, #6972ee 100%);
+.ai-gradient {
+    background: linear-gradient(135.89deg, #388ee9 0%, #7b51ff 85.4%);
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;

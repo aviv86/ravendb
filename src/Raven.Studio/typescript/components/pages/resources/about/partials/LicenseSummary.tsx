@@ -64,7 +64,7 @@ export function LicenseSummary(props: LicenseSummaryProps) {
                             <span
                                 className={classNames({
                                     "text-cloud": isCloud,
-                                    "text-ai": licenseType === "EnterpriseAi",
+                                    "ai-gradient": licenseType === "EnterpriseAi",
                                 })}
                             >
                                 {licenseModel.licenseTypeTextProvider(licenseStatus)}

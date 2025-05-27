@@ -33,12 +33,12 @@
         --license-color: var(--license-professional);
         --decoration-color: var(--license-color);
     }
-    .enterprise {
+    .enterprise,
+    .production {
         --license-color: var(--license-enterprise);
         --decoration-color: var(--license-color);
     }
-    .enterprise-ai,
-    .production {
+    .enterprise-ai {
         --license-color: var(--license-enterprise-ai);
         --decoration-color: var(--license-color);
     }

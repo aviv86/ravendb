@@ -82,6 +82,13 @@ $bounceinonce-properties: bounceInOnce 0.15s 1 both;
                 flex-direction: column;
             }
 
+            .main-logo-ai {
+                width: 13rem;
+                position: relative;
+                display: flex;
+                flex-direction: column;
+            }
+
             .icon-raven {
                 display: none;
                 color: #388ee9;

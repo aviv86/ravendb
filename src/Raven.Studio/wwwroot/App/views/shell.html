@@ -12,8 +12,8 @@
     <nav class="bs5 navbar">
         <div class="navbar-header">
             <a class="navbar-brand no-decor" data-bind="attr: { href: appUrls.clusterDashboard }">
-                <div class="main-logo">
-                    <img src="../../Content/img/ravendb_logo.svg" />
+                <div data-bind="attr: { class: logoClass() }">
+                    <img data-bind="attr: { src: logoSrc() }" alt="RavenDB Logo" />
                     <div data-bind="visible: serverEnvironment, attr: { class: 'badge rounded-pill ms-auto text-uppercase margin-bottom-xxs ' + serverEnvironmentClass() }" title="Server environment">
                         <span data-bind="text: serverEnvironment"></span>
                     </div>

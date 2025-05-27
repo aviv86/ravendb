@@ -1,3 +1,4 @@
+import "./FeatureAvailabilitySummary.scss";
 import classNames from "classnames";
 import { useRavenLink } from "components/hooks/useRavenLink";
 import { useAppSelector } from "components/store";
@@ -8,7 +9,6 @@ import Button from "react-bootstrap/Button";
 import IconName from "typings/server/icons";
 import { licenseSelectors } from "./shell/licenseSlice";
 import { Icon } from "./Icon";
-import "./FeatureAvailabilitySummary.scss";
 import RichAlert from "components/common/RichAlert";
 import appUrl from "common/appUrl";
 import OverlayTrigger from "react-bootstrap/OverlayTrigger";
@@ -155,22 +155,22 @@ export function FeatureAvailabilitySummary(props: FeatureAvailabilitySummaryProp
                                         {formatAvailabilityValue(data.professional)}
                                     </td>
                                 )}
-                                {!isCloud && (
-                                    <td
-                                        className={classNames("enterprise", {
-                                            "current ": currentLicense === "Enterprise",
-                                        })}
-                                    >
-                                        {formatAvailabilityValue(data.enterprise, isCloud)}
-                                    </td>
-                                )}
                                 <td
-                                    className={classNames("enterprise-ai", {
-                                        current: currentLicense === "EnterpriseAi",
+                                    className={classNames("enterprise", {
+                                        "current ": currentLicense === "Enterprise",
                                     })}
                                 >
-                                    {formatAvailabilityValue(data.enterpriseAi ?? data.enterprise, isCloud)}
+                                    {formatAvailabilityValue(data.enterprise, isCloud)}
                                 </td>
+                                {!isCloud && (
+                                    <td
+                                        className={classNames("enterprise-ai", {
+                                            current: currentLicense === "EnterpriseAi",
+                                        })}
+                                    >
+                                        {formatAvailabilityValue(data.enterpriseAi ?? data.enterprise, isCloud)}
+                                    </td>
+                                )}
                                 {currentLicense === "Developer" && (
                                     <td
                                         className={classNames("developer", {
@@ -189,7 +189,9 @@ export function FeatureAvailabilitySummary(props: FeatureAvailabilitySummaryProp
                                     return (
                                         <td
                                             key={licenseType}
-                                            className={classNames(getLicenseTypeClass(licenseType), "current")}
+                                            className={classNames("current", getLicenseTypeClass(licenseType), {
+                                                "ai-gradient": licenseType === "EnterpriseAi",
+                                            })}
                                         >
                                             Current
                                         </td>
@@ -236,17 +238,26 @@ function LicenseTitle({ licenseTextType: licenseType, licenseClass }: LicenseTit
         return licenseType;
     };
 
+    const logoBackgroundStyle: React.CSSProperties =
+        licenseType === "EnterpriseAi"
+            ? {
+                  background: "linear-gradient(135.89deg, #388EE9 0%, #7B51FF 85.4%)",
+              }
+            : { backgroundColor: `var(--license-${licenseClass})` };
+
     return (
         <div
-            className={classNames(licenseClass, "vstack align-items-center")}
+            className={classNames("vstack align-items-center", licenseClass, {
+                "ai-gradient": licenseType === "EnterpriseAi",
+            })}
             style={{ color: `var(--license-${licenseClass})` }}
         >
             <div>
                 <div
                     style={{
+                        ...logoBackgroundStyle,
                         width: "50px",
                         height: "13px",
-                        backgroundColor: `var(--license-${licenseClass})`,
                         mask: `url(${ravendbLogo}) no-repeat center`,
                         maskSize: "contain",
                         WebkitMask: `url(${ravendbLogo}) no-repeat center`,
@@ -263,7 +274,7 @@ export default function FeatureAvailabilitySummaryWrapper({
     isUnlimited,
     data,
 }: FeatureAvailabilitySummaryProps & { isUnlimited: boolean }) {
-    const { value: isOpen, toggle: toggleIsOpen } = useBoolean(true); // TODO kalczur: maybe !isUnlimited
+    const { value: isOpen, toggle: toggleIsOpen } = useBoolean(false); // TODO kalczur: maybe !isUnlimited
 
     return (
         <>
@@ -313,7 +324,7 @@ function FeatureAvailabilitySummaryModal({
                             <br />
                             <div>
                                 If you are developing you can test this and many more features using free{" "}
-                                <a href="TODO kalczur" className="text-developer">
+                                <a href="https://ravendb.net/license/request/dev" className="text-developer">
                                     Developer license <Icon icon="newtab" margin="m-0" />
                                 </a>
                             </div>
@@ -447,7 +458,7 @@ function useLicenseTextTypes() {
         }
 
         if (licenseTextType === "Production") {
-            return currentLicense === "EnterpriseAi";
+            return currentLicense === "Enterprise";
         }
 
         if (licenseTextType === "Community" && currentLicense === "None") {
