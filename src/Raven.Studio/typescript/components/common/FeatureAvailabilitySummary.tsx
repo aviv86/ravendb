@@ -198,7 +198,7 @@ export function FeatureAvailabilitySummary(props: FeatureAvailabilitySummaryProp
                                     );
                                 }
 
-                                return <td></td>;
+                                return <td key={licenseType}></td>;
                             })}
                         </tr>
                     </tbody>
