@@ -366,7 +366,11 @@ namespace Raven.Server.Dashboard
             var embeddingsGenerationCount = database.EtlLoader.EmbeddingsGenerationDestinations.Count;
             long embeddingsGenerationCountOnNode = GetTaskCountOnNode<EmbeddingsGenerationConfiguration>(database, dbRecord, serverStore, database.EtlLoader.EmbeddingsGenerationDestinations,
                 task => EtlLoader.GetProcessState(task.Transforms, database, task.Name));
-            
+
+            var genAiCount = database.EtlLoader.GenAiDestinations.Count;
+            long genAiCountOnNode = GetTaskCountOnNode<GenAiConfiguration>(database, dbRecord, serverStore, database.EtlLoader.GenAiDestinations,
+                task => EtlLoader.GetProcessState(task.Transforms, database, task.Name));
+
             var periodicBackupCount = database.PeriodicBackupRunner.PeriodicBackups.Count;
             long periodicBackupCountOnNode = BackupUtils.GetTasksCountOnNode(serverStore, database.Name, context);
 
@@ -384,7 +388,7 @@ namespace Raven.Server.Dashboard
             ongoingTasksCount = extRepCount + replicationHubCount + replicationSinkCount +
                                 ravenEtlCount + sqlEtlCount + elasticSearchEtlCount + olapEtlCount + kafkaEtlCount +
                                 rabbitMqEtlCount + azureQueueStorageEtlCount + amazonSqsEtlCount + periodicBackupCount +
-                                subscriptionCount + kafkaSinkCount + rabbitMqSinkCount + snowflakeEtlCount + embeddingsGenerationCount;
+                                subscriptionCount + kafkaSinkCount + rabbitMqSinkCount + snowflakeEtlCount + embeddingsGenerationCount + genAiCount;
 
             return new DatabaseOngoingTasksInfoItem
             {
@@ -406,6 +410,7 @@ namespace Raven.Server.Dashboard
                 RabbitMqSinkCount = rabbitMqSinkCountOnNode,
                 SnowflakeEtlCount = snowflakeEtlCountOnNode,
                 EmbeddingsGenerationCount = embeddingsGenerationCountOnNode,
+                GenAiCount = genAiCountOnNode
             };
         }
 

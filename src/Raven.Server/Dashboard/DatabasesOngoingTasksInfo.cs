@@ -50,7 +50,10 @@ namespace Raven.Server.Dashboard
         public long SnowflakeEtlCount { get; set; }
         
         public long EmbeddingsGenerationCount { get; set; }
-        
+
+        public long GenAiCount { get; set; }
+
+
         public DynamicJsonValue ToJson()
         {
             return new DynamicJsonValue
@@ -73,6 +76,7 @@ namespace Raven.Server.Dashboard
                 [nameof(RabbitMqSinkCount)] = RabbitMqSinkCount,
                 [nameof(SnowflakeEtlCount)] = SnowflakeEtlCount,
                 [nameof(EmbeddingsGenerationCount)] = EmbeddingsGenerationCount,
+                [nameof(GenAiCount)] = GenAiCount
             };
         }
     }
