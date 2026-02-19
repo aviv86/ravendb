@@ -50,6 +50,9 @@
     <Compile Remove="Web\Studio\EmbeddedData\NorthwindModel.cs" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="pgsqlparser" />
+  </ItemGroup>
+  <ItemGroup>
     <None Remove="Integrations\PostgreSQL\Npgsql\npgsql_types_3.csv" />
     <None Remove="Integrations\PostgreSQL\Npgsql\npgsql_types_4.csv" />
     <None Remove="Integrations\PostgreSQL\Npgsql\npgsql_types_4_0_0.csv" />

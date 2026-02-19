@@ -8,6 +8,7 @@ using Raven.Server.Documents;
 using Raven.Server.Integrations.PostgreSQL.Exceptions;
 using Raven.Server.Integrations.PostgreSQL.Messages;
 using Raven.Server.Integrations.PostgreSQL.PowerBI;
+using Raven.Server.Integrations.PostgreSQL.Translation;
 using Raven.Server.Integrations.PostgreSQL.Types;
 using Raven.Server.Logging;
 using Sparrow.Logging;
@@ -45,6 +46,14 @@ namespace Raven.Server.Integrations.PostgreSQL
             {
                 if (RqlQuery.TryParse(queryText, parametersDataTypes, documentDatabase, out var rqlQuery))
                     return rqlQuery;
+
+                if (AstSqlToRqlTranslator.TryTranslate(queryText, parametersDataTypes, out var rql))
+				{
+					if (_log.IsInfoEnabled)
+						_log.Info($"PG SQL translated via AST. SQL: {queryText} => RQL: {rql}");
+
+                    return new RqlQuery(rql, parametersDataTypes, documentDatabase);
+				}
 
                 if (PowerBIQuery.TryParse(queryText, parametersDataTypes, documentDatabase, out var powerBiQuery))
                 {
