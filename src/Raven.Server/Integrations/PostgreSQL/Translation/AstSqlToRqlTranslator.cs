@@ -11,7 +11,6 @@ using Raven.Client.Documents.Session;
 using Raven.Server.Logging;
 using Sparrow.Logging;
 using Sparrow.Server.Logging;
-using Sparrow;
 
 namespace Raven.Server.Integrations.PostgreSQL.Translation
 {
@@ -27,13 +26,13 @@ namespace Raven.Server.Integrations.PostgreSQL.Translation
         private const string UnsupportedOrderByForGroupByMessage = "Unsupported ORDER BY for GROUP BY";
         private const string UnsupportedJoinMessage = "Unsupported JOIN shape";
 
-        public static bool TryTranslate(string sql, int[] parameterTypes, out string rql)
+        public static bool TryParse(string sql, int[] parameterTypes, out string rql)
         {
             // TODO RavenDB-26030: parameterTypes are currently unused by the translator.
             rql = null;
 
             if (Logger.IsDebugEnabled)
-                Logger.Debug($"{nameof(AstSqlToRqlTranslator)}.{nameof(TryTranslate)} invoked with SQL: {sql}");
+                Logger.Debug($"{nameof(AstSqlToRqlTranslator)}.{nameof(TryParse)} invoked with SQL: {sql}");
 
             try
             {
@@ -107,7 +106,7 @@ namespace Raven.Server.Integrations.PostgreSQL.Translation
             }
             else
             {
-                ApplySelectProjection(q, selectStmt);
+                ApplySelectProjection(q, selectStmt, fromAlias);
 
                 // Build ORDER BY clause
                 if (selectStmt.SortClause != null && selectStmt.SortClause.Count > 0)
@@ -467,7 +466,7 @@ namespace Raven.Server.Integrations.PostgreSQL.Translation
             }
         }
 
-        private static void ApplySelectProjection(AsyncDocumentQuery<JObject> q, SelectStmt selectStmt)
+        private static void ApplySelectProjection(AsyncDocumentQuery<JObject> q, SelectStmt selectStmt, string fromAlias)
         {
             var targets = selectStmt.TargetList;
             if (targets == null || targets.Count == 0)
@@ -492,9 +491,12 @@ namespace Raven.Server.Integrations.PostgreSQL.Translation
                 return;
             }
 
-            var projectionFields = BuildColumnProjections(targets);
+            var projectionFields = BuildColumnProjections(targets, fromAlias);
             if (isDistinct && projectionFields.Length != 1)
                 throw new NotSupportedException(UnsupportedDistinctMessage);
+
+            if (projectionFields.Length == 0)
+                return;
 
             q.SelectFields<JObject>(projectionFields);
             if (isDistinct)
@@ -514,24 +516,44 @@ namespace Raven.Server.Integrations.PostgreSQL.Translation
             return target.ResTarget?.Val?.FuncCall != null;
         }
 
-        private static string[] BuildColumnProjections(IReadOnlyList<Node> targetList)
+        private static string[] BuildColumnProjections(IReadOnlyList<Node> targetList, string fromAlias)
         {
             var projectionFields = new List<string>(capacity: targetList.Count);
 
             foreach (var t in targetList)
             {
                 var val = t.ResTarget?.Val;
-                if (val?.ColumnRef == null)
+                if (val == null)
                     throw new NotSupportedException(UnsupportedSelectProjectionMessage);
 
-                var fieldName = ExtractFieldName(val);
-                if (string.IsNullOrWhiteSpace(fieldName))
-                    throw new NotSupportedException(UnsupportedSelectProjectionMessage);
+                var fieldName = TranslateSelectTargetValue(val, fromAlias);
+                if (fieldName == null)
+                    continue; // e.g. PowerBI pseudo-column json()
 
                 projectionFields.Add(fieldName);
             }
 
             return projectionFields.ToArray();
+        }
+
+        private static string TranslateSelectTargetValue(Node val, string fromAlias)
+        {
+            if (val.ColumnRef != null)
+            {
+                var fieldName = ExtractFieldName(val, fromAlias);
+                if (string.IsNullOrWhiteSpace(fieldName))
+                    throw new NotSupportedException("Unsupported column reference in SELECT projection");
+
+                if (string.Equals(fieldName, "json()", StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                if (string.Equals(fieldName, "id()", StringComparison.OrdinalIgnoreCase))
+                    return "id()";
+
+                return fieldName;
+            }
+
+            throw new NotSupportedException(UnsupportedSelectProjectionMessage);
         }
 
         private static string[] BuildAggregateProjections(IReadOnlyList<Node> targetList)

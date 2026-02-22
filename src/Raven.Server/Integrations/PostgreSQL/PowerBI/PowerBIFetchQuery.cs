@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using PgSqlParser;
+using Raven.Server.Integrations.PostgreSQL.Translation;
 using Raven.Server.Documents;
 using Raven.Server.Documents.Queries;
 using Raven.Server.Documents.Queries.AST;
@@ -45,6 +47,9 @@ namespace Raven.Server.Integrations.PostgreSQL.PowerBI
 
         public static bool TryParse(string queryText, int[] parametersDataTypes, DocumentDatabase documentDatabase, out PgQuery pgQuery)
         {
+            if (TryParseSimpleTableFetchViaAst(queryText, parametersDataTypes, documentDatabase, out pgQuery))
+                return true;
+
             // Match queries sent by PowerBI, either RQL queries wrapped in an SQL statement OR generic SQL queries
             if (TryGetMatches(queryText, out var matches, out var rql) == false)
             {
@@ -101,6 +106,60 @@ namespace Raven.Server.Integrations.PostgreSQL.PowerBI
 
             pgQuery = new PowerBIRqlQuery(newRql, parametersDataTypes, documentDatabase, powerBiReplaceValues, limit.Success ? int.Parse(limit.Value) : null);
 
+            return true;
+        }
+
+        private static bool TryParseSimpleTableFetchViaAst(string queryText, int[] parametersDataTypes, DocumentDatabase documentDatabase, out PgQuery pgQuery)
+        {
+            pgQuery = null;
+
+            if (string.IsNullOrWhiteSpace(queryText))
+                return false;
+
+            // RavenDB-26030: temporary bridge.
+            // Only attempt this for the simple PowerBI Import table fetch shape:
+            //   SELECT ... FROM "public"."<Collection>" <alias?> [WHERE ...] [LIMIT/OFFSET ...]
+            // Everything else should fall back to the existing regex-based PowerBI parser.
+            if (IsSimplePublicRangeVarSelect(queryText, out _) == false)
+                return false;
+
+            if (AstSqlToRqlTranslator.TryParse(queryText, parametersDataTypes, out var rql) == false)
+                return false;
+
+            pgQuery = new PowerBIRqlQuery(rql, parametersDataTypes, documentDatabase, replaces: null, limit: null);
+            return true;
+        }
+
+        private static bool IsSimplePublicRangeVarSelect(string sql, out string aliasName)
+        {
+            aliasName = null;
+
+            var parseResult = Parser.Parse(sql);
+            if (parseResult.IsSuccess == false || parseResult.Value == null)
+                return false;
+
+            if (parseResult.Value.Stmts == null || parseResult.Value.Stmts.Count != 1)
+                return false;
+
+            var stmt = parseResult.Value.Stmts[0];
+            var select = stmt?.Stmt?.SelectStmt;
+            if (select == null)
+                return false;
+
+            if (select.FromClause is not { Count: 1 })
+                return false;
+
+            var rangeVar = select.FromClause[0]?.RangeVar;
+            if (rangeVar == null)
+                return false;
+
+            if (string.Equals(rangeVar.Schemaname, "public", StringComparison.OrdinalIgnoreCase) == false)
+                return false;
+
+            if (string.IsNullOrWhiteSpace(rangeVar.Relname))
+                return false;
+
+            aliasName = rangeVar.Alias?.Aliasname;
             return true;
         }
 
@@ -212,7 +271,7 @@ namespace Raven.Server.Integrations.PostgreSQL.PowerBI
             return result;
         }
 
-        private static bool TryGetMatches(string queryText, out List<Match> outMatches, out Query rql)
+        private static bool TryGetMatches(string queryText, out List<Match> outMatches, out Raven.Server.Documents.Queries.AST.Query rql)
         {
             var matches = new List<Match>();
             var queryToMatch = queryText;
@@ -272,7 +331,7 @@ namespace Raven.Server.Integrations.PostgreSQL.PowerBI
             return replaces;
         }
 
-        private static bool IsRql(string queryText, out Query query)
+        private static bool IsRql(string queryText, out Documents.Queries.AST.Query query)
         {
             try
             {

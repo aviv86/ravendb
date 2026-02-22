@@ -47,14 +47,6 @@ namespace Raven.Server.Integrations.PostgreSQL
                 if (RqlQuery.TryParse(queryText, parametersDataTypes, documentDatabase, out var rqlQuery))
                     return rqlQuery;
 
-                if (AstSqlToRqlTranslator.TryTranslate(queryText, parametersDataTypes, out var rql))
-				{
-					if (_log.IsInfoEnabled)
-						_log.Info($"PG SQL translated via AST. SQL: {queryText} => RQL: {rql}");
-
-                    return new RqlQuery(rql, parametersDataTypes, documentDatabase);
-				}
-
                 if (PowerBIQuery.TryParse(queryText, parametersDataTypes, documentDatabase, out var powerBiQuery))
                 {
                     if (documentDatabase.ServerStore.LicenseManager.CanUsePowerBi(withNotification: true, out var licenseLimitException) == false)
@@ -65,6 +57,12 @@ namespace Raven.Server.Integrations.PostgreSQL
 
                 if (HardcodedQuery.TryParse(queryText, parametersDataTypes, session, out var hardcodedQuery))
                     return hardcodedQuery;
+
+                if (AstSqlToRqlTranslator.TryParse(queryText, parametersDataTypes, out var rql))
+                {
+                    return new RqlQuery(rql, parametersDataTypes, documentDatabase);
+                }
+
 
                 throw new PgErrorException(
                     PgErrorCodes.StatementTooComplex,

@@ -7,7 +7,7 @@ namespace EmbeddedTests.Server.Integrations.PostgreSQL;
 public class RavenDB_26030 : PostgreSqlIntegrationTestBase
 {
     [Fact]
-    public async Task Simple_select_where_is_translated_via_ast_and_returns_rows()
+    public async Task Simple_select_where_should_be_translated_via_ast_and_return_rows()
     {
         using (var store = GetDocumentStore())
         {
@@ -18,7 +18,7 @@ public class RavenDB_26030 : PostgreSqlIntegrationTestBase
                 await session.SaveChangesAsync();
             }
 
-            const string sql = "SELECT * FROM Users WHERE Name = 'oren'";
+            const string sql = "SELECT * FROM Users WHERE \"Name\" = 'oren'";
 
             var result = await Act(store, sql);
 

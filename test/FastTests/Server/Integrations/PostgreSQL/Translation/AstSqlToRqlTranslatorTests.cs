@@ -1,5 +1,4 @@
 using System;
-using Raven.Server.Integrations.PostgreSQL.Translation;
 using Xunit;
 
 namespace FastTests.Server.Integrations.PostgreSQL.Translation
@@ -8,7 +7,7 @@ namespace FastTests.Server.Integrations.PostgreSQL.Translation
     {
         private static string Translate(string sql)
         {
-            Assert.True(AstSqlToRqlTranslator.TryTranslate(sql, Array.Empty<int>(), out var rql));
+            Assert.True(Raven.Server.Integrations.PostgreSQL.Translation.AstSqlToRqlTranslator.TryParse(sql, Array.Empty<int>(), out var rql));
             return rql;
         }
 
