@@ -33,6 +33,10 @@ namespace Raven.Server.Integrations.PostgreSQL
         private bool _queryWasRun;
         private static readonly RavenLogger Logger = RavenLogManager.Instance.GetLoggerForServer<RqlQuery>();
 
+        protected virtual bool IncludeDocumentIdColumn => true;
+
+        protected virtual bool IncludePowerBIJsonColumn => true;
+
         ~RqlQuery()
         {
             try
@@ -114,7 +118,7 @@ namespace Raven.Server.Integrations.PostgreSQL
 
             var resultsFormat = GetDefaultResultsFormat();
 
-            if (samples[0].Id != null)
+            if (IncludeDocumentIdColumn && samples[0].Id != null)
                 Columns[Constants.Documents.Indexing.Fields.DocumentIdFieldName] = new PgColumn(Constants.Documents.Indexing.Fields.DocumentIdFieldName, (short)Columns.Count, PgText.Default, resultsFormat);
 
             BlittableJsonReaderObject.PropertyDetails prop = default;
@@ -197,13 +201,16 @@ namespace Raven.Server.Integrations.PostgreSQL
             }
 
 
-            if (Columns.TryGetValue(Constants.Documents.Querying.Fields.PowerBIJsonFieldName, out var jsonColumn))
+            if (IncludePowerBIJsonColumn)
             {
-                jsonColumn.PgType = PgJson.Default;
-            }
-            else
-            {
-                Columns[Constants.Documents.Querying.Fields.PowerBIJsonFieldName] = new PgColumn(Constants.Documents.Querying.Fields.PowerBIJsonFieldName, (short)Columns.Count, PgJson.Default, resultsFormat);
+                if (Columns.TryGetValue(Constants.Documents.Querying.Fields.PowerBIJsonFieldName, out var jsonColumn))
+                {
+                    jsonColumn.PgType = PgJson.Default;
+                }
+                else
+                {
+                    Columns[Constants.Documents.Querying.Fields.PowerBIJsonFieldName] = new PgColumn(Constants.Documents.Querying.Fields.PowerBIJsonFieldName, (short)Columns.Count, PgJson.Default, resultsFormat);
+                }
             }
 
             return Columns.Values;
@@ -255,13 +262,8 @@ namespace Raven.Server.Integrations.PostgreSQL
 
                 try
                 {
-                    short? idIndex = null;
-                    if (Columns.TryGetValue(Constants.Documents.Indexing.Fields.DocumentIdFieldName, out var col))
-                    {
-                        idIndex = col.ColumnIndex;
-                    }
-
-                    var jsonIndex = Columns[Constants.Documents.Querying.Fields.PowerBIJsonFieldName].ColumnIndex;
+                    short? idIndex = GetDocumentIdColumnIndex();
+                    short? jsonIndex = GetPowerBIJsonColumnIndex();
 
                     foreach (var result in _result)
                     {
@@ -269,18 +271,9 @@ namespace Raven.Server.Integrations.PostgreSQL
 
                         Array.Clear(row, 0, row.Length);
 
-                        if (idIndex != null && result.Id != null)
-                        {
-                            row[idIndex.Value] = Encoding.UTF8.GetBytes(result.Id.ToString());
-                        }
+                        WriteDocumentIdColumn(result, row, idIndex);
 
-                        jsonResult.Modifications = new DynamicJsonValue(jsonResult);
-
-                        if (jsonResult.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject _))
-                        {
-                            // remove @metadata
-                            jsonResult.Modifications.Remove(Constants.Documents.Metadata.Key);
-                        }
+                        var modifications = BeforeRow(jsonResult, jsonIndex);
 
                         foreach (var (columnName, pgColumn) in Columns)
                         {
@@ -296,19 +289,10 @@ namespace Raven.Server.Integrations.PostgreSQL
 
                             HandleSpecialColumnsIfNeeded(columnName, prop, prop.Value, ref row);
 
-                            jsonResult.Modifications.Remove(columnName);
+                            modifications?.Remove(columnName);
                         }
 
-
-                        if (jsonResult.Modifications.Removals.Count != jsonResult.Count)
-                        {
-                            using (DocumentDatabase.DocumentsStorage.ContextPool.AllocateOperationContext(out DocumentsOperationContext context))
-                            using (context.OpenReadTransaction())
-                            {
-                                var modified = context.ReadObject(jsonResult, "renew");
-                                row[jsonIndex] = Encoding.UTF8.GetBytes(modified.ToString());
-                            }
-                        }
+                        AfterRow(jsonResult, row, jsonIndex);
 
                         await writer.WriteAsync(builder.DataRow(row[..Columns.Count]), token);
                     }
@@ -397,6 +381,64 @@ namespace Raven.Server.Integrations.PostgreSQL
             }
 
             return null;
+        }
+
+        protected short? GetDocumentIdColumnIndex()
+        {
+            if (IncludeDocumentIdColumn == false)
+                return null;
+
+            return Columns.TryGetValue(Constants.Documents.Indexing.Fields.DocumentIdFieldName, out var col)
+                ? col.ColumnIndex
+                : null;
+        }
+
+        protected short? GetPowerBIJsonColumnIndex()
+        {
+            if (IncludePowerBIJsonColumn == false)
+                return null;
+
+            return Columns.TryGetValue(Constants.Documents.Querying.Fields.PowerBIJsonFieldName, out var jsonCol)
+                ? jsonCol.ColumnIndex
+                : null;
+        }
+
+        protected void WriteDocumentIdColumn(Document result, ReadOnlyMemory<byte>?[] row, short? idIndex)
+        {
+            if (idIndex != null && result.Id != null)
+                row[idIndex.Value] = Encoding.UTF8.GetBytes(result.Id.ToString());
+        }
+
+        protected virtual DynamicJsonValue BeforeRow(BlittableJsonReaderObject jsonResult, short? jsonIndex)
+        {
+            if (IncludePowerBIJsonColumn == false || jsonIndex == null)
+                return null;
+
+            jsonResult.Modifications = new DynamicJsonValue(jsonResult);
+
+            if (jsonResult.TryGet(Constants.Documents.Metadata.Key, out BlittableJsonReaderObject _))
+            {
+                // remove @metadata
+                jsonResult.Modifications.Remove(Constants.Documents.Metadata.Key);
+            }
+
+            return jsonResult.Modifications;
+        }
+
+        protected virtual void AfterRow(BlittableJsonReaderObject jsonResult, ReadOnlyMemory<byte>?[] row, short? jsonIndex)
+        {
+            if (IncludePowerBIJsonColumn == false || jsonIndex == null)
+                return;
+
+            if (jsonResult.Modifications.Removals.Count == jsonResult.Count)
+                return;
+
+            using (DocumentDatabase.DocumentsStorage.ContextPool.AllocateOperationContext(out DocumentsOperationContext context))
+            using (context.OpenReadTransaction())
+            {
+                var modified = context.ReadObject(jsonResult, "renew");
+                row[jsonIndex.Value] = Encoding.UTF8.GetBytes(modified.ToString());
+            }
         }
 
         public void ReleaseQueryResources()

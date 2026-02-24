@@ -63,7 +63,6 @@ namespace Raven.Server.Integrations.PostgreSQL
                     return new RqlQuery(rql, parametersDataTypes, documentDatabase);
                 }
 
-
                 throw new PgErrorException(
                     PgErrorCodes.StatementTooComplex,
                     "Unhandled query (Are you using ; in your query? " +
